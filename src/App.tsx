@@ -10,6 +10,10 @@ import Dashboard from "./pages/cooperative/Dashboard";
 import Members from "./pages/cooperative/Members";
 import Contributions from "./pages/cooperative/Contributions";
 import Loans from "./pages/cooperative/Loans";
+import Dividends from "./pages/cooperative/Dividends";
+import Announcements from "./pages/cooperative/Announcements";
+import Reports from "./pages/cooperative/Reports";
+import Settings from "./pages/cooperative/Settings";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +30,10 @@ const App = () => (
             <Route path="members" element={<Members />} />
             <Route path="contributions" element={<Contributions />} />
             <Route path="loans" element={<Loans />} />
+            <Route path="dividends" element={<Dividends />} />
+            <Route path="announcements" element={<Announcements />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="settings" element={<Settings />} />
           </Route>
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
