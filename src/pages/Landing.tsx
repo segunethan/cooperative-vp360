@@ -223,25 +223,27 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <motion.div
-              className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0"
+              className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center flex-shrink-0"
               whileHover={{ scale: 1.08 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
             >
-              <span className="text-primary-foreground font-bold text-sm font-display">J</span>
+              <span className="text-primary font-bold text-sm font-display">J</span>
             </motion.div>
-            <span className="font-display font-bold text-lg tracking-tight text-foreground">Jollify</span>
+            <span className={`font-display font-bold text-lg tracking-tight transition-colors duration-300 ${scrolled ? "text-foreground" : "text-white"}`}>
+              Jollify
+            </span>
           </div>
 
           {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
+          <nav className="hidden md:flex items-center gap-8 text-sm font-medium">
             {["Features", "How it works", "Pricing", "API"].map((item) => (
               <a
                 key={item}
                 href={`#${item.toLowerCase().replace(/ /g, "-")}`}
-                className="relative hover:text-foreground transition-colors duration-200 group"
+                className={`relative transition-colors duration-200 group ${scrolled ? "text-muted-foreground hover:text-foreground" : "text-white/80 hover:text-white"}`}
               >
                 {item}
-                <span className="absolute -bottom-0.5 left-0 h-px w-0 bg-primary group-hover:w-full transition-all duration-300" />
+                <span className={`absolute -bottom-0.5 left-0 h-px w-0 group-hover:w-full transition-all duration-300 ${scrolled ? "bg-primary" : "bg-white"}`} />
               </a>
             ))}
           </nav>
@@ -249,13 +251,13 @@ export default function Landing() {
           <div className="hidden md:flex items-center gap-3">
             <Link
               to="/login"
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-2"
+              className={`text-sm font-medium transition-colors px-3 py-2 ${scrolled ? "text-muted-foreground hover:text-foreground" : "text-white/80 hover:text-white"}`}
             >
               Log in
             </Link>
             <Link
               to="/signup"
-              className="inline-flex items-center gap-1.5 text-sm font-semibold bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
+              className={`inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-lg transition-colors ${scrolled ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-white text-primary hover:bg-white/90"}`}
             >
               Sign up free
             </Link>
@@ -263,7 +265,7 @@ export default function Landing() {
 
           {/* Mobile menu button */}
           <motion.button
-            className="md:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+            className={`md:hidden p-2 rounded-lg transition-colors ${scrolled ? "text-muted-foreground hover:text-foreground hover:bg-muted/50" : "text-white/80 hover:text-white hover:bg-white/10"}`}
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             whileTap={{ scale: 0.92 }}
           >
