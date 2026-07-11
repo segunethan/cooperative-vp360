@@ -308,8 +308,9 @@ export const sendMemberInviteEmail = async (
   cooperativeName: string,
   cooperativeNumber?: string | null
 ): Promise<void> => {
+  const redirectTo = `${window.location.origin}/accept-invite`;
   const { error } = await supabase.functions.invoke("invite-member", {
-    body: { memberNumber, memberName, memberEmail, cooperativeName, cooperativeNumber: cooperativeNumber ?? null },
+    body: { memberNumber, memberName, memberEmail, cooperativeName, cooperativeNumber: cooperativeNumber ?? null, redirectTo },
   });
   if (error) throw new Error(error.message);
 };

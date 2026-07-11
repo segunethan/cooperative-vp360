@@ -8,6 +8,8 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import AcceptInvite from "./pages/AcceptInvite";
+import MemberPortal from "./pages/MemberPortal";
 import NotFound from "./pages/NotFound";
 import { CooperativeLayout } from "./components/layout/CooperativeLayout";
 import Dashboard from "./pages/cooperative/Dashboard";
@@ -33,6 +35,8 @@ const App = () => (
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/accept-invite" element={<AcceptInvite />} />
+            <Route path="/member" element={<MemberPortal />} />
 
             <Route
               path="/cooperative"
