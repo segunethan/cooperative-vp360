@@ -21,6 +21,7 @@ import Dividends from "./pages/cooperative/Dividends";
 import Announcements from "./pages/cooperative/Announcements";
 import Reports from "./pages/cooperative/Reports";
 import Settings from "./pages/cooperative/Settings";
+import SuperAdmin from "./pages/SuperAdmin";
 
 const queryClient = new QueryClient();
 
@@ -37,6 +38,7 @@ const App = () => (
             <Route path="/signup" element={<Signup />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />
             <Route path="/member" element={<MemberPortal />} />
+            <Route path="/super-admin" element={<SuperAdmin />} />
 
             <Route
               path="/cooperative"
