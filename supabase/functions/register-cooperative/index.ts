@@ -85,7 +85,7 @@ serve(async (req) => {
               </h1>
               <p style="margin:0 0 28px;font-size:15px;color:#6b7280;line-height:1.7;">
                 You're almost ready to take <strong style="color:#374151;">${cooperativeName}</strong> digital.
-                Enter the 6-digit code below in the app to verify your email and activate your account.
+                Enter the 8-digit code below in the app to verify your email and activate your account.
               </p>
 
               <!-- OTP Box -->

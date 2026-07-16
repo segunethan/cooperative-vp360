@@ -18,7 +18,8 @@ const Signup = () => {
   const [error, setError] = useState<string | null>(null);
   const [otpError, setOtpError] = useState<string | null>(null);
   const [resendCountdown, setResendCountdown] = useState(0);
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const OTP_LEN = 8;
+  const [otp, setOtp] = useState(Array(8).fill(""));
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [form, setForm] = useState({
@@ -77,7 +78,7 @@ const Signup = () => {
     try {
       await callRegisterFunction(false);
       setStep("verify-otp");
-      setOtp(["", "", "", "", "", ""]);
+      setOtp(Array(8).fill(""));
       startResendCountdown();
       setTimeout(() => otpRefs.current[0]?.focus(), 100);
     } catch (err) {
@@ -93,7 +94,7 @@ const Signup = () => {
     next[index] = value.slice(-1);
     setOtp(next);
     setOtpError(null);
-    if (value && index < 5) otpRefs.current[index + 1]?.focus();
+    if (value && index < OTP_LEN - 1) otpRefs.current[index + 1]?.focus();
   };
 
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -101,21 +102,21 @@ const Signup = () => {
       otpRefs.current[index - 1]?.focus();
     }
     if (e.key === "ArrowLeft" && index > 0) otpRefs.current[index - 1]?.focus();
-    if (e.key === "ArrowRight" && index < 5) otpRefs.current[index + 1]?.focus();
+    if (e.key === "ArrowRight" && index < OTP_LEN - 1) otpRefs.current[index + 1]?.focus();
   };
 
   const handleOtpPaste = (e: React.ClipboardEvent) => {
-    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-    if (pasted.length === 6) {
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, OTP_LEN);
+    if (pasted.length === OTP_LEN) {
       setOtp(pasted.split(""));
-      otpRefs.current[5]?.focus();
+      otpRefs.current[OTP_LEN - 1]?.focus();
     }
     e.preventDefault();
   };
 
   const handleVerifyOtp = async () => {
     const token = otp.join("");
-    if (token.length !== 6) { setOtpError("Enter all 6 digits."); return; }
+    if (token.length !== OTP_LEN) { setOtpError(`Enter all ${OTP_LEN} digits.`); return; }
     setOtpError(null);
     setLoading(true);
     try {
@@ -147,7 +148,7 @@ const Signup = () => {
     if (resendCountdown > 0) return;
     try {
       await callRegisterFunction(true);
-      setOtp(["", "", "", "", "", ""]);
+      setOtp(Array(8).fill(""));
       otpRefs.current[0]?.focus();
       startResendCountdown();
     } catch {
@@ -219,7 +220,7 @@ const Signup = () => {
               <p className="text-xs font-semibold uppercase tracking-widest text-primary/60 mb-1.5">Email Verification</p>
               <h1 className="text-2xl font-bold text-foreground tracking-tight">Check your inbox</h1>
               <p className="text-muted-foreground mt-1.5 text-sm leading-relaxed">
-                We sent a 6-digit verification code to{" "}
+                We sent an 8-digit verification code to{" "}
                 <strong className="text-foreground">{form.email}</strong>. Enter it below to activate your account.
               </p>
             </div>
@@ -254,7 +255,7 @@ const Signup = () => {
               <Button
                 onClick={handleVerifyOtp}
                 className="w-full h-11 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-                disabled={loading || otp.join("").length !== 6}
+                disabled={loading || otp.join("").length !== OTP_LEN}
               >
                 {loading ? (
                   <span className="flex items-center gap-2">

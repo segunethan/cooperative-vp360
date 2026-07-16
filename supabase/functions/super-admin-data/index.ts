@@ -39,7 +39,8 @@ serve(async (req) => {
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 
-  const { action, tenantId, status } = await req.json();
+  const body = await req.json();
+  const { action, tenantId, status } = body;
 
   // ── List all cooperatives ──────────────────────────────────────────────────
   if (action === "list") {
@@ -62,15 +63,16 @@ serve(async (req) => {
     return ok(result);
   }
 
-  // ── Get members for a cooperative ─────────────────────────────────────────
+  // ── Get members (all, or scoped to a cooperative) ─────────────────────────
   if (action === "members") {
-    if (!tenantId) return err("tenantId required");
-    const { data, error } = await admin
+    let query = admin
       .from("members")
-      .select("id, full_name, email, phone, status, created_at, member_number")
-      .eq("tenant_id", tenantId)
-      .order("full_name");
+      .select("id, full_name, email, phone, status, created_at, member_number, tenant_id, tenants(name)")
+      .order("created_at", { ascending: false });
 
+    if (tenantId) query = query.eq("tenant_id", tenantId);
+
+    const { data, error } = await query;
     if (error) return err(error.message, 500);
     return ok(data ?? []);
   }
@@ -82,6 +84,21 @@ serve(async (req) => {
       .from("tenants")
       .update({ status })
       .eq("id", tenantId)
+      .select()
+      .single();
+
+    if (error) return err(error.message, 500);
+    return ok(data);
+  }
+
+  // ── Set member status (revoke / activate member) ───────────────────────────
+  if (action === "set_member_status") {
+    const { memberId } = body as { memberId?: string };
+    if (!memberId || !status) return err("memberId and status required");
+    const { data, error } = await admin
+      .from("members")
+      .update({ status })
+      .eq("id", memberId)
       .select()
       .single();
 
