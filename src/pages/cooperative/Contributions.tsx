@@ -41,7 +41,7 @@ import { useAuth } from "@/context/AuthContext";
 import { fetchAllContributions, recordMemberContribution, markContributionAsCompleted, markContributionAsFailed } from "@/lib/api/contributions";
 import { formatMoney } from "@/lib/money";
 
-const EMPTY_FORM = { memberId: "", amount: "", channel: "", notes: "" };
+const EMPTY_FORM = { memberId: "", amount: "", channel: "", notes: "", paidDate: "" };
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -59,6 +59,7 @@ const Contributions = () => {
 
   const [recordOpen, setRecordOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   // ── Data ─────────────────────────────────────────────────────────────────
@@ -81,9 +82,10 @@ const Contributions = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["contributions"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
-      toast({ title: "Contribution Recorded", description: "Entry is pending verification." });
+      toast({ title: "Contribution Recorded", description: "Contribution recorded successfully." });
       setRecordOpen(false);
       setForm(EMPTY_FORM);
+      setReceiptFile(null);
       setFormError(null);
     },
     onError: (err: Error) => setFormError(err.message),
@@ -116,12 +118,18 @@ const Contributions = () => {
     if (!form.amount || parseFloat(form.amount) <= 0) { setFormError("Enter a valid amount in naira"); return; }
     if (!form.channel) { setFormError("Select a payment channel"); return; }
 
+    const noteParts = [
+      form.paidDate ? `Payment date: ${new Date(form.paidDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : null,
+      receiptFile ? `Receipt: ${receiptFile.name}` : null,
+      form.notes || null,
+    ].filter(Boolean);
+
     recordMutation.mutate({
       tenantId: tenant.id,
       memberNumber: form.memberId.trim().toUpperCase(),
       amountNaira: parseFloat(form.amount),
       channel: form.channel,
-      notes: form.notes || undefined,
+      notes: noteParts.length ? noteParts.join(" | ") : undefined,
     });
   };
 
@@ -188,11 +196,11 @@ const Contributions = () => {
                 <Calendar className="h-5 w-5 text-warning" />
               </div>
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Pending Verification</p>
+                <p className="text-sm font-medium text-muted-foreground">Pending Review</p>
                 {isLoading ? <Skeleton className="h-7 w-12 mt-1" /> : (
                   <p className="text-2xl font-bold">{contributions.filter((c) => c.status === "Pending").length}</p>
                 )}
-                <p className="text-xs text-muted-foreground">Awaiting approval</p>
+                <p className="text-xs text-muted-foreground">Member-submitted requests</p>
               </div>
             </div>
           </CardContent>
@@ -306,7 +314,7 @@ const Contributions = () => {
       </Card>
 
       {/* Record Contribution Dialog */}
-      <Dialog open={recordOpen} onOpenChange={(o) => { setRecordOpen(o); if (!o) { setForm(EMPTY_FORM); setFormError(null); } }}>
+      <Dialog open={recordOpen} onOpenChange={(o) => { setRecordOpen(o); if (!o) { setForm(EMPTY_FORM); setReceiptFile(null); setFormError(null); } }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -361,14 +369,40 @@ const Contributions = () => {
               </Select>
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="rc-paid-date">Payment Date</Label>
+                <Input
+                  id="rc-paid-date"
+                  type="date"
+                  max={new Date().toISOString().split("T")[0]}
+                  value={form.paidDate}
+                  onChange={(e) => setForm({ ...form, paidDate: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="rc-notes">Notes (optional)</Label>
+                <Input
+                  id="rc-notes"
+                  placeholder="Slip ID, reference…"
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                />
+              </div>
+            </div>
+
             <div className="space-y-1.5">
-              <Label htmlFor="rc-notes">Notes (optional)</Label>
+              <Label htmlFor="rc-receipt">Receipt (optional)</Label>
               <Input
-                id="rc-notes"
-                placeholder="Reference number, slip ID…"
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                id="rc-receipt"
+                type="file"
+                accept="image/*,.pdf"
+                className="cursor-pointer file:mr-2 file:text-xs file:font-medium file:rounded file:border-0 file:bg-muted file:px-2 file:py-1"
+                onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
               />
+              {receiptFile && (
+                <p className="text-xs text-muted-foreground">Selected: {receiptFile.name}</p>
+              )}
             </div>
 
             <div className="flex gap-2 pt-2">
