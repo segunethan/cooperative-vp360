@@ -22,6 +22,12 @@ interface Cooperative {
   created_at: string;
   member_count: number;
   admin_count: number;
+  // contact fields — column name varies depending on create_tenant implementation
+  email?: string;
+  contact_email?: string;
+  phone?: string;
+  contact_phone?: string;
+  [key: string]: unknown;
 }
 
 interface Member {
@@ -38,16 +44,29 @@ interface Member {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const STATUS_COLORS: Record<string, string> = {
+  ACTIVE:                      "bg-emerald-50 text-emerald-700 border-emerald-200",
+  EMAIL_VERIFIED:              "bg-blue-50 text-blue-700 border-blue-200",
+  KYB_SUBMITTED:               "bg-purple-50 text-purple-700 border-purple-200",
+  SUSPENDED:                   "bg-red-50 text-red-700 border-red-200",
+  PENDING_EMAIL_VERIFICATION:  "bg-amber-50 text-amber-700 border-amber-200",
+  // lowercase fallbacks in case any old data slips through
   active:    "bg-emerald-50 text-emerald-700 border-emerald-200",
-  trial:     "bg-blue-50 text-blue-700 border-blue-200",
   suspended: "bg-red-50 text-red-700 border-red-200",
-  pending:   "bg-amber-50 text-amber-700 border-amber-200",
-  inactive:  "bg-stone-100 text-stone-500 border-stone-200",
 };
+
+const DISPLAY_LABELS: Record<string, string> = {
+  ACTIVE:                     "Active",
+  EMAIL_VERIFIED:             "Email Verified",
+  KYB_SUBMITTED:              "KYB Submitted",
+  SUSPENDED:                  "Suspended",
+  PENDING_EMAIL_VERIFICATION: "Pending Verification",
+};
+
+const normalizeStatus = (s: string) => DISPLAY_LABELS[s] ?? s;
 
 const Badge = ({ status }: { status: string }) => (
   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border capitalize ${STATUS_COLORS[status] ?? "bg-muted text-muted-foreground border-border"}`}>
-    {status}
+    {normalizeStatus(status)}
   </span>
 );
 
@@ -226,8 +245,8 @@ const SuperAdmin = () => {
   // ── Derived stats ────────────────────────────────────────────────────────────
   const stats = {
     total: coops.length,
-    active: coops.filter((c) => c.status === "active" || c.status === "trial").length,
-    suspended: coops.filter((c) => c.status === "suspended").length,
+    active: coops.filter((c) => ["ACTIVE", "EMAIL_VERIFIED", "KYB_SUBMITTED"].includes(c.status)).length,
+    suspended: coops.filter((c) => c.status === "SUSPENDED").length,
     members: coops.reduce((s, c) => s + (c.member_count ?? 0), 0),
   };
 
@@ -514,117 +533,131 @@ const SuperAdmin = () => {
                   {coopSearch ? "No cooperatives match your search." : "No cooperatives registered yet."}
                 </div>
               ) : (
-                <>
-                  {/* Table header */}
-                  <div className="grid grid-cols-[1.5fr_1fr_80px_80px_100px_120px_110px] items-center bg-stone-50 border-b border-stone-100 px-5 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    <span>Cooperative</span>
-                    <span>Status</span>
-                    <span>Members</span>
-                    <span>Admins</span>
-                    <span>Plan</span>
-                    <span>Joined</span>
-                    <span className="text-right">Actions</span>
-                  </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[900px]">
+                    <thead className="bg-stone-50 border-b border-stone-100">
+                      <tr className="text-left text-xs text-muted-foreground uppercase tracking-wide">
+                        <th className="px-4 py-3 font-medium w-8" />
+                        <th className="px-4 py-3 font-medium">Cooperative</th>
+                        <th className="px-4 py-3 font-medium">Email</th>
+                        <th className="px-4 py-3 font-medium">Phone</th>
+                        <th className="px-4 py-3 font-medium">Status</th>
+                        <th className="px-4 py-3 font-medium text-center">Members</th>
+                        <th className="px-4 py-3 font-medium text-center">Admins</th>
+                        <th className="px-4 py-3 font-medium">Plan</th>
+                        <th className="px-4 py-3 font-medium">Joined</th>
+                        <th className="px-4 py-3 font-medium text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {filteredCoops.map((c) => {
+                        const coopEmail = (c.email || c.contact_email || c.admin_email) as string | undefined;
+                        const coopPhone = (c.phone || c.contact_phone) as string | undefined;
+                        return (
+                          <>
+                            <tr key={c.id} className="hover:bg-stone-50 transition-colors">
+                              <td className="px-4 py-3">
+                                <button onClick={() => toggleExpandCoop(c.id)}
+                                  className="p-0.5 text-muted-foreground hover:text-foreground transition-colors">
+                                  {expandedCoop === c.id
+                                    ? <ChevronUp className="h-4 w-4" />
+                                    : <ChevronDown className="h-4 w-4" />}
+                                </button>
+                              </td>
+                              <td className="px-4 py-3">
+                                <p className="font-medium text-foreground whitespace-nowrap">{c.name}</p>
+                                <p className="text-xs text-muted-foreground">/{c.slug}</p>
+                              </td>
+                              <td className="px-4 py-3 text-muted-foreground text-xs">{coopEmail ?? "—"}</td>
+                              <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{coopPhone ?? "—"}</td>
+                              <td className="px-4 py-3"><Badge status={c.status} /></td>
+                              <td className="px-4 py-3 text-center font-semibold text-foreground">{c.member_count}</td>
+                              <td className="px-4 py-3 text-center text-muted-foreground">{c.admin_count}</td>
+                              <td className="px-4 py-3">
+                                <span className="capitalize text-xs text-muted-foreground bg-stone-100 px-2 py-0.5 rounded-full">
+                                  {c.billing_plan ?? "free"}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{fmt(c.created_at)}</td>
+                              <td className="px-4 py-3 text-right">
+                                {actionLoading === c.id ? <Spinner sm /> :
+                                  c.status === "SUSPENDED" ? (
+                                    <Button size="sm" variant="outline"
+                                      className="h-7 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                      onClick={() => setCoopStatus(c.id, "ACTIVE")}>
+                                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Activate
+                                    </Button>
+                                  ) : (
+                                    <Button size="sm" variant="outline"
+                                      className="h-7 text-xs border-red-200 text-red-600 hover:bg-red-50"
+                                      onClick={() => setCoopStatus(c.id, "SUSPENDED")}>
+                                      <Ban className="h-3.5 w-3.5 mr-1" /> Suspend
+                                    </Button>
+                                  )}
+                              </td>
+                            </tr>
 
-                  <div className="divide-y divide-stone-100">
-                    {filteredCoops.map((c) => (
-                      <div key={c.id}>
-                        <div className="grid grid-cols-[1.5fr_1fr_80px_80px_100px_120px_110px] items-center px-5 py-3.5 hover:bg-stone-50 transition-colors">
-                          {/* Name + expand */}
-                          <div className="flex items-center gap-2 min-w-0">
-                            <button onClick={() => toggleExpandCoop(c.id)}
-                              className="p-1 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
-                              {expandedCoop === c.id
-                                ? <ChevronUp className="h-4 w-4" />
-                                : <ChevronDown className="h-4 w-4" />}
-                            </button>
-                            <div className="min-w-0">
-                              <p className="font-medium text-sm text-foreground truncate">{c.name}</p>
-                              <p className="text-xs text-muted-foreground">/{c.slug}</p>
-                            </div>
-                          </div>
-
-                          <div><Badge status={c.status} /></div>
-                          <div className="text-sm font-semibold text-foreground">{c.member_count}</div>
-                          <div className="text-sm text-muted-foreground">{c.admin_count}</div>
-                          <div className="capitalize text-xs text-muted-foreground bg-stone-100 px-2 py-0.5 rounded-full w-fit">{c.billing_plan ?? "free"}</div>
-                          <div className="text-xs text-muted-foreground whitespace-nowrap">{fmt(c.created_at)}</div>
-
-                          {/* Action */}
-                          <div className="flex justify-end">
-                            {actionLoading === c.id ? (
-                              <Spinner sm />
-                            ) : c.status === "suspended" ? (
-                              <Button size="sm" variant="outline"
-                                className="h-7 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                                onClick={() => setCoopStatus(c.id, "active")}>
-                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Activate
-                              </Button>
-                            ) : (
-                              <Button size="sm" variant="outline"
-                                className="h-7 text-xs border-red-200 text-red-600 hover:bg-red-50"
-                                onClick={() => setCoopStatus(c.id, "suspended")}>
-                                <Ban className="h-3.5 w-3.5 mr-1" /> Suspend
-                              </Button>
+                            {/* Expanded members inline */}
+                            {expandedCoop === c.id && (
+                              <tr key={`${c.id}-expand`}>
+                                <td colSpan={10} className="bg-stone-50/80 border-t border-stone-200 px-6 py-4">
+                                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                                    Members — {c.name}
+                                  </p>
+                                  {expandLoading === c.id ? (
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                                      <Spinner sm /> Loading…
+                                    </div>
+                                  ) : !expandedMembers[c.id]?.length ? (
+                                    <p className="text-sm text-muted-foreground">No members yet.</p>
+                                  ) : (
+                                    <div className="overflow-x-auto rounded-lg border border-stone-200 bg-white">
+                                      <table className="w-full text-sm min-w-[700px]">
+                                        <thead className="bg-stone-50 border-b border-stone-200">
+                                          <tr className="text-left text-xs text-muted-foreground">
+                                            <th className="px-4 py-2.5 font-medium">Name</th>
+                                            <th className="px-4 py-2.5 font-medium">Email</th>
+                                            <th className="px-4 py-2.5 font-medium">Phone</th>
+                                            <th className="px-4 py-2.5 font-medium">Member #</th>
+                                            <th className="px-4 py-2.5 font-medium">Status</th>
+                                            <th className="px-4 py-2.5 font-medium">Joined</th>
+                                            <th className="px-4 py-2.5 font-medium text-right">Action</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-stone-100">
+                                          {expandedMembers[c.id].map((m) => (
+                                            <tr key={m.id} className="hover:bg-stone-50">
+                                              <td className="px-4 py-2.5 font-medium whitespace-nowrap">{m.full_name}</td>
+                                              <td className="px-4 py-2.5 text-muted-foreground text-xs">{m.email}</td>
+                                              <td className="px-4 py-2.5 text-muted-foreground text-xs">{m.phone ?? "—"}</td>
+                                              <td className="px-4 py-2.5 text-muted-foreground font-mono text-xs">{m.member_number ?? "—"}</td>
+                                              <td className="px-4 py-2.5"><Badge status={m.status} /></td>
+                                              <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap text-xs">{fmt(m.created_at)}</td>
+                                              <td className="px-4 py-2.5 text-right">
+                                                {actionLoading === m.id ? <Spinner sm /> :
+                                                  m.status === "suspended" ? (
+                                                    <button onClick={() => setMemberStatus(m.id, "active", c.id)}
+                                                      className="text-xs font-medium text-emerald-600 hover:underline">Activate</button>
+                                                  ) : (
+                                                    <button onClick={() => setMemberStatus(m.id, "suspended", c.id)}
+                                                      className="text-xs font-medium text-red-600 hover:underline">Revoke</button>
+                                                  )}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
                             )}
-                          </div>
-                        </div>
-
-                        {/* Expanded members */}
-                        {expandedCoop === c.id && (
-                          <div className="bg-stone-50/80 border-t border-stone-200 px-5 py-4">
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                              Members — {c.name}
-                            </p>
-                            {expandLoading === c.id ? (
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                                <Spinner sm /> Loading…
-                              </div>
-                            ) : !expandedMembers[c.id]?.length ? (
-                              <p className="text-sm text-muted-foreground">No members yet.</p>
-                            ) : (
-                              <div className="overflow-x-auto rounded-lg border border-stone-200 bg-white">
-                                <table className="w-full text-sm">
-                                  <thead className="bg-stone-50 border-b border-stone-200">
-                                    <tr className="text-left text-xs text-muted-foreground">
-                                      <th className="px-4 py-2.5 font-medium">Name</th>
-                                      <th className="px-4 py-2.5 font-medium">Email</th>
-                                      <th className="px-4 py-2.5 font-medium">Member #</th>
-                                      <th className="px-4 py-2.5 font-medium">Status</th>
-                                      <th className="px-4 py-2.5 font-medium">Joined</th>
-                                      <th className="px-4 py-2.5 font-medium text-right">Action</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-stone-100">
-                                    {expandedMembers[c.id].map((m) => (
-                                      <tr key={m.id} className="hover:bg-stone-50">
-                                        <td className="px-4 py-2.5 font-medium whitespace-nowrap">{m.full_name}</td>
-                                        <td className="px-4 py-2.5 text-muted-foreground">{m.email}</td>
-                                        <td className="px-4 py-2.5 text-muted-foreground font-mono text-xs">{m.member_number ?? "—"}</td>
-                                        <td className="px-4 py-2.5"><Badge status={m.status} /></td>
-                                        <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{fmt(m.created_at)}</td>
-                                        <td className="px-4 py-2.5 text-right">
-                                          {actionLoading === m.id ? <Spinner sm /> :
-                                            m.status === "suspended" ? (
-                                              <button onClick={() => setMemberStatus(m.id, "active", c.id)}
-                                                className="text-xs font-medium text-emerald-600 hover:underline">Activate</button>
-                                            ) : (
-                                              <button onClick={() => setMemberStatus(m.id, "suspended", c.id)}
-                                                className="text-xs font-medium text-red-600 hover:underline">Revoke</button>
-                                            )}
-                                        </td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </>
+                          </>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           )}
@@ -661,41 +694,45 @@ const SuperAdmin = () => {
                   {memberSearch || memberFilter !== "all" ? "No members match your filter." : "No members yet."}
                 </div>
               ) : (
-                <>
-                  <div className="grid grid-cols-[1.5fr_1.5fr_1fr_100px_100px_120px_90px] items-center bg-stone-50 border-b border-stone-100 px-5 py-2.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    <span>Name</span>
-                    <span>Email</span>
-                    <span>Cooperative</span>
-                    <span>Member #</span>
-                    <span>Status</span>
-                    <span>Joined</span>
-                    <span className="text-right">Action</span>
-                  </div>
-                  <div className="divide-y divide-stone-100">
-                    {filteredMembers.map((m) => (
-                      <div key={m.id} className="grid grid-cols-[1.5fr_1.5fr_1fr_100px_100px_120px_90px] items-center px-5 py-3 hover:bg-stone-50 transition-colors">
-                        <span className="font-medium text-sm text-foreground truncate pr-3">{m.full_name}</span>
-                        <span className="text-sm text-muted-foreground truncate pr-3">{m.email}</span>
-                        <span className="text-xs text-muted-foreground truncate pr-3">
-                          {m.tenants?.name ?? "—"}
-                        </span>
-                        <span className="text-xs font-mono text-muted-foreground">{m.member_number ?? "—"}</span>
-                        <span><Badge status={m.status} /></span>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">{fmt(m.created_at)}</span>
-                        <div className="text-right">
-                          {actionLoading === m.id ? <Spinner sm /> :
-                            m.status === "suspended" ? (
-                              <button onClick={() => setMemberStatus(m.id, "active")}
-                                className="text-xs font-medium text-emerald-600 hover:underline">Activate</button>
-                            ) : (
-                              <button onClick={() => setMemberStatus(m.id, "suspended")}
-                                className="text-xs font-medium text-red-600 hover:underline">Revoke</button>
-                            )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[860px]">
+                    <thead className="bg-stone-50 border-b border-stone-100">
+                      <tr className="text-left text-xs text-muted-foreground uppercase tracking-wide">
+                        <th className="px-5 py-3 font-medium">Name</th>
+                        <th className="px-4 py-3 font-medium">Email</th>
+                        <th className="px-4 py-3 font-medium">Phone</th>
+                        <th className="px-4 py-3 font-medium">Cooperative</th>
+                        <th className="px-4 py-3 font-medium">Member #</th>
+                        <th className="px-4 py-3 font-medium">Status</th>
+                        <th className="px-4 py-3 font-medium">Joined</th>
+                        <th className="px-4 py-3 font-medium text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {filteredMembers.map((m) => (
+                        <tr key={m.id} className="hover:bg-stone-50 transition-colors">
+                          <td className="px-5 py-3 font-medium text-foreground whitespace-nowrap">{m.full_name}</td>
+                          <td className="px-4 py-3 text-muted-foreground text-xs">{m.email}</td>
+                          <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">{m.phone ?? "—"}</td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground">{m.tenants?.name ?? "—"}</td>
+                          <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{m.member_number ?? "—"}</td>
+                          <td className="px-4 py-3"><Badge status={m.status} /></td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{fmt(m.created_at)}</td>
+                          <td className="px-4 py-3 text-right">
+                            {actionLoading === m.id ? <Spinner sm /> :
+                              m.status === "suspended" ? (
+                                <button onClick={() => setMemberStatus(m.id, "active")}
+                                  className="text-xs font-medium text-emerald-600 hover:underline">Activate</button>
+                              ) : (
+                                <button onClick={() => setMemberStatus(m.id, "suspended")}
+                                  className="text-xs font-medium text-red-600 hover:underline">Revoke</button>
+                              )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           )}

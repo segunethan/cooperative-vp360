@@ -27,12 +27,19 @@ const Login = () => {
       return;
     }
 
-    // Determine role: admins are in tenant_users, members are not
-    const { data: { user } } = await supabase.auth.getUser();
+    // Primary check: security-definer RPC bypasses RLS circular dependency
+    const { data: tenantId } = await supabase.rpc("get_tenant_id");
+
+    if (tenantId) {
+      setLoading(false);
+      navigate("/cooperative", { replace: true });
+      return;
+    }
+
+    // Fallback: direct query (works once tenant_users_self_read policy is applied)
     const { data: adminRecord } = await supabase
       .from("tenant_users")
       .select("tenant_id")
-      .eq("user_id", user?.id ?? "")
       .maybeSingle();
 
     setLoading(false);

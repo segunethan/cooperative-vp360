@@ -28,18 +28,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [tenant, setTenant] = useState<TenantInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadTenant = async (userId: string) => {
+  const loadTenant = async (_userId: string) => {
+    // Primary: call the security-definer RPC which bypasses RLS on tenant_users
+    const { data: tenantId } = await supabase.rpc("get_tenant_id");
+
+    if (tenantId) {
+      const { data } = await supabase
+        .from("tenants")
+        .select("id, name, status, billing_plan, slug, cooperative_number")
+        .eq("id", tenantId)
+        .maybeSingle();
+      setTenant(data as TenantInfo | null);
+      return;
+    }
+
+    // Fallback: direct join (works once tenant_users_self_read policy exists)
     const { data } = await supabase
       .from("tenant_users")
       .select("tenant_id, tenants(id, name, status, billing_plan, slug, cooperative_number)")
-      .eq("user_id", userId)
       .maybeSingle();
 
-    if (data?.tenants) {
-      setTenant(data.tenants as unknown as TenantInfo);
-    } else {
-      setTenant(null);
-    }
+    setTenant(data?.tenants ? (data.tenants as unknown as TenantInfo) : null);
   };
 
   const reloadTenant = async () => {
