@@ -34,11 +34,12 @@ import {
   Calendar,
   Plus,
   Download,
-  PiggyBankIcon,
+  FileDown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
 import { fetchAllContributions, recordMemberContribution, markContributionAsCompleted, markContributionAsFailed } from "@/lib/api/contributions";
+import type { ContributionRow } from "@/lib/api/contributions";
 import { formatMoney } from "@/lib/money";
 
 const EMPTY_FORM = { memberId: "", amount: "", channel: "", notes: "", paidDate: "" };
@@ -222,7 +223,7 @@ const Contributions = () => {
                   <TableHead>Amount</TableHead>
                   <TableHead>Payment Channel</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Reference</TableHead>
+                  <TableHead>Receipt</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -264,8 +265,24 @@ const Contributions = () => {
                           {c.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground font-mono truncate max-w-[140px]">
-                        {c.reference}
+                      <TableCell>
+                        {c.receiptUrl ? (
+                          <a
+                            href={c.receiptUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium"
+                          >
+                            <FileDown className="h-3.5 w-3.5" />
+                            Download
+                          </a>
+                        ) : c.notes ? (
+                          <span className="text-xs text-muted-foreground truncate max-w-[120px] block" title={c.notes}>
+                            {c.notes}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-1">
