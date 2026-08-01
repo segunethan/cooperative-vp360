@@ -45,7 +45,7 @@ const statusLabel: Record<string, string> = {
   EXITED: "Exited",
 };
 
-const EMPTY_CONTRIB = { amount: "", channel: "", paidDate: "", receiptNote: "", notes: "" };
+const EMPTY_CONTRIB = { amount: "", channel: "", paidDate: "", notes: "" };
 const EMPTY_LOAN = { productIndex: "", principalNaira: "", tenure: "", purpose: "", notes: "" };
 
 const MemberPortal = () => {
@@ -57,6 +57,7 @@ const MemberPortal = () => {
   // Contribution dialog
   const [contribOpen, setContribOpen] = useState(false);
   const [contribForm, setContribForm] = useState(EMPTY_CONTRIB);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [contribError, setContribError] = useState<string | null>(null);
   const [contribLoading, setContribLoading] = useState(false);
 
@@ -184,9 +185,25 @@ const MemberPortal = () => {
     if (!contribForm.channel) { setContribError("Select a payment channel"); return; }
     setContribLoading(true);
 
-    const parts = [
+    // Upload receipt file to Supabase Storage if provided
+    let receiptUrl: string | null = null;
+    if (receiptFile) {
+      const ext = receiptFile.name.split(".").pop() ?? "bin";
+      const ref = generatePaymentReference("REC");
+      const path = `${data.tenantId}/${ref}.${ext}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("contribution-receipts")
+        .upload(path, receiptFile, { contentType: receiptFile.type, upsert: false });
+      if (!uploadError && uploadData) {
+        const { data: urlData } = supabase.storage
+          .from("contribution-receipts")
+          .getPublicUrl(uploadData.path);
+        receiptUrl = urlData.publicUrl;
+      }
+    }
+
+    const noteParts = [
       contribForm.paidDate ? `Payment date: ${contribForm.paidDate}` : null,
-      contribForm.receiptNote ? `Receipt ref: ${contribForm.receiptNote}` : null,
       contribForm.notes || null,
     ].filter(Boolean);
 
@@ -197,13 +214,15 @@ const MemberPortal = () => {
       channel: contribForm.channel,
       status: "PENDING",
       reference: generatePaymentReference("CONTRIB"),
-      notes: parts.length ? parts.join(" | ") : null,
+      notes: noteParts.length ? noteParts.join(" | ") : null,
+      receipt_url: receiptUrl,
     });
 
     setContribLoading(false);
     if (error) { setContribError(error.message); return; }
     setContribOpen(false);
     setContribForm(EMPTY_CONTRIB);
+    setReceiptFile(null);
     await refreshData();
   };
 
@@ -449,7 +468,7 @@ const MemberPortal = () => {
                 <PiggyBank className="h-5 w-5 text-primary" />
                 <h3 className="font-semibold text-foreground">Submit Contribution</h3>
               </div>
-              <button onClick={() => { setContribOpen(false); setContribForm(EMPTY_CONTRIB); setContribError(null); }} className="text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={() => { setContribOpen(false); setContribForm(EMPTY_CONTRIB); setReceiptFile(null); setContribError(null); }} className="text-muted-foreground hover:text-foreground transition-colors">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -487,27 +506,41 @@ const MemberPortal = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Date Paid</label>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Date Paid</label>
+                <input
+                  type="date"
+                  max={new Date().toISOString().split("T")[0]}
+                  value={contribForm.paidDate}
+                  onChange={(e) => setContribForm({ ...contribForm, paidDate: e.target.value })}
+                  className="w-full h-10 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">
+                  Receipt / Proof of Payment <span className="text-muted-foreground font-normal">(optional)</span>
+                </label>
+                <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/40 hover:bg-primary/4 transition-colors">
+                  {receiptFile ? (
+                    <div className="flex flex-col items-center gap-1 px-4 text-center">
+                      <span className="text-sm font-medium text-foreground">{receiptFile.name}</span>
+                      <span className="text-xs text-muted-foreground">{(receiptFile.size / 1024).toFixed(0)} KB · Click to change</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-muted-foreground">
+                      <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 16v-8m0 0-3 3m3-3 3 3M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2" /></svg>
+                      <span className="text-xs font-medium">Upload receipt, teller slip, or bank screenshot</span>
+                      <span className="text-xs">PNG, JPG, PDF — up to 5 MB</span>
+                    </div>
+                  )}
                   <input
-                    type="date"
-                    max={new Date().toISOString().split("T")[0]}
-                    value={contribForm.paidDate}
-                    onChange={(e) => setContribForm({ ...contribForm, paidDate: e.target.value })}
-                    className="w-full h-10 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    type="file"
+                    accept="image/*,.pdf"
+                    className="hidden"
+                    onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Receipt / Teller No.</label>
-                  <input
-                    type="text"
-                    placeholder="Optional ref number"
-                    value={contribForm.receiptNote}
-                    onChange={(e) => setContribForm({ ...contribForm, receiptNote: e.target.value })}
-                    className="w-full h-10 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  />
-                </div>
+                </label>
               </div>
 
               <div className="space-y-1.5">
@@ -524,7 +557,7 @@ const MemberPortal = () => {
               <div className="flex gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={() => { setContribOpen(false); setContribForm(EMPTY_CONTRIB); setContribError(null); }}
+                  onClick={() => { setContribOpen(false); setContribForm(EMPTY_CONTRIB); setReceiptFile(null); setContribError(null); }}
                   className="flex-1 h-10 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
                 >
                   Cancel

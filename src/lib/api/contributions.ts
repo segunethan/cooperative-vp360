@@ -13,6 +13,8 @@ export interface ContributionRow {
   channel: string;
   status: string;
   reference: string;
+  notes: string | null;
+  receiptUrl: string | null;
 }
 
 export interface RecordContributionData {
@@ -44,6 +46,8 @@ export const fetchAllContributions = async (): Promise<ContributionRow[]> => {
       channel,
       status,
       reference,
+      notes,
+      receipt_url,
       created_at,
       member:members(member_number, full_name)
     `)
@@ -65,6 +69,8 @@ export const fetchAllContributions = async (): Promise<ContributionRow[]> => {
       channel: toDisplayChannel(row.channel),
       status: toDisplayStatus(row.status),
       reference: row.reference,
+      notes: (row.notes as string | null) ?? null,
+      receiptUrl: (row.receipt_url as string | null) ?? null,
     };
   });
 };
