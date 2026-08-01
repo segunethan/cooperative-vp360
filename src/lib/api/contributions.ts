@@ -86,13 +86,41 @@ export const recordMemberContribution = async (data: RecordContributionData): Pr
     member_id: memberRow.id,
     amount_kobo: nairaToKobo(data.amountNaira),
     channel: data.channel,
-    status: "PENDING",
+    status: "COMPLETED",
+    completed_at: new Date().toISOString(),
     reference: generatePaymentReference("CONTRIB"),
     period_month: data.periodMonth ?? null,
     period_year: data.periodYear ?? new Date().getFullYear(),
     notes: data.notes ?? null,
   });
 
+  if (error) handleSupabaseError(error);
+};
+
+export const submitMemberContribution = async (data: {
+  tenantId: string;
+  memberId: string;
+  amountNaira: number;
+  channel: string;
+  paidDate?: string;
+  receiptNote?: string;
+  notes?: string;
+}): Promise<void> => {
+  const parts = [
+    data.paidDate ? `Payment date: ${data.paidDate}` : null,
+    data.receiptNote ? `Receipt ref: ${data.receiptNote}` : null,
+    data.notes || null,
+  ].filter(Boolean);
+
+  const { error } = await supabase.from("contributions").insert({
+    tenant_id: data.tenantId,
+    member_id: data.memberId,
+    amount_kobo: nairaToKobo(data.amountNaira),
+    channel: data.channel,
+    status: "PENDING",
+    reference: generatePaymentReference("CONTRIB"),
+    notes: parts.length ? parts.join(" | ") : null,
+  });
   if (error) handleSupabaseError(error);
 };
 
