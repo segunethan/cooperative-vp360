@@ -20,6 +20,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 import {
   Table,
   TableBody,
@@ -35,6 +36,9 @@ import {
   Plus,
   Download,
   FileDown,
+  ExternalLink,
+  Hash,
+  MessageSquare,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
@@ -62,6 +66,7 @@ const Contributions = () => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [viewContrib, setViewContrib] = useState<ContributionRow | null>(null);
 
   // ── Data ─────────────────────────────────────────────────────────────────
   const { data: contributions = [], isLoading } = useQuery({
@@ -286,31 +291,9 @@ const Contributions = () => {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center space-x-1">
-                          {c.status === "Pending" && (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-success hover:text-success"
-                                disabled={approveMutation.isPending || rejectMutation.isPending}
-                                onClick={() => approveMutation.mutate(c.id)}
-                              >
-                                Approve
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-destructive hover:text-destructive"
-                                disabled={approveMutation.isPending || rejectMutation.isPending}
-                                onClick={() => rejectMutation.mutate(c.id)}
-                              >
-                                Reject
-                              </Button>
-                            </>
-                          )}
-                          {c.status !== "Pending" && (
-                            <Button variant="ghost" size="sm">View</Button>
-                          )}
+                          <Button variant="ghost" size="sm" onClick={() => setViewContrib(c)}>
+                            View
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -329,6 +312,146 @@ const Contributions = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* View Details Dialog */}
+      <Dialog open={!!viewContrib} onOpenChange={(o) => { if (!o) setViewContrib(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PiggyBank className="h-5 w-5 text-primary" />
+              Contribution Details
+            </DialogTitle>
+          </DialogHeader>
+
+          {viewContrib && (
+            <div className="space-y-5">
+              {/* Status */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Status</span>
+                <Badge variant="outline" className={getStatusColor(viewContrib.status)}>
+                  {viewContrib.status}
+                </Badge>
+              </div>
+
+              <Separator />
+
+              {/* Member + Amount */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-0.5">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Member</p>
+                  <p className="font-semibold text-foreground">{viewContrib.member}</p>
+                  <p className="text-xs text-muted-foreground font-mono">{viewContrib.memberId}</p>
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Amount</p>
+                  <p className="font-semibold text-foreground text-xl">{viewContrib.amount}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-0.5">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Payment Channel</p>
+                  <p className="text-sm font-medium text-foreground">{viewContrib.channel}</p>
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Submitted</p>
+                  <p className="text-sm font-medium text-foreground">{viewContrib.date}</p>
+                </div>
+              </div>
+
+              {/* Reference */}
+              <div className="space-y-0.5">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <Hash className="h-3 w-3" />Reference
+                </p>
+                <p className="text-sm font-mono text-foreground bg-muted/50 rounded px-2 py-1 select-all">
+                  {viewContrib.reference}
+                </p>
+              </div>
+
+              {/* Notes */}
+              {viewContrib.notes && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <MessageSquare className="h-3 w-3" />Notes
+                  </p>
+                  <p className="text-sm text-foreground bg-muted/30 rounded-lg px-3 py-2 whitespace-pre-line">
+                    {viewContrib.notes}
+                  </p>
+                </div>
+              )}
+
+              {/* Receipt */}
+              {viewContrib.receiptUrl && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <FileDown className="h-3 w-3" />Receipt
+                  </p>
+                  {/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(viewContrib.receiptUrl) ? (
+                    <div className="relative rounded-lg overflow-hidden border border-border bg-muted/20">
+                      <img
+                        src={viewContrib.receiptUrl}
+                        alt="Payment receipt"
+                        className="w-full max-h-64 object-contain"
+                      />
+                      <a
+                        href={viewContrib.receiptUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="absolute top-2 right-2 inline-flex items-center gap-1 text-xs bg-white/90 hover:bg-white text-foreground font-medium px-2 py-1 rounded shadow-sm"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Open
+                      </a>
+                    </div>
+                  ) : (
+                    <a
+                      href={viewContrib.receiptUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm font-medium text-primary hover:text-primary/80 hover:bg-muted/50 transition-colors"
+                    >
+                      <FileDown className="h-4 w-4" />
+                      Download Receipt / Attachment
+                      <ExternalLink className="h-3.5 w-3.5 ml-auto" />
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* Approve / Reject for pending */}
+              {viewContrib.status === "Pending" && (
+                <>
+                  <Separator />
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/5"
+                      disabled={rejectMutation.isPending || approveMutation.isPending}
+                      onClick={() => {
+                        rejectMutation.mutate(viewContrib.id);
+                        setViewContrib(null);
+                      }}
+                    >
+                      Reject
+                    </Button>
+                    <Button
+                      className="flex-1 bg-success text-success-foreground hover:bg-success/90"
+                      disabled={approveMutation.isPending || rejectMutation.isPending}
+                      onClick={() => {
+                        approveMutation.mutate(viewContrib.id);
+                        setViewContrib(null);
+                      }}
+                    >
+                      Approve Contribution
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Record Contribution Dialog */}
       <Dialog open={recordOpen} onOpenChange={(o) => { setRecordOpen(o); if (!o) { setForm(EMPTY_FORM); setReceiptFile(null); setFormError(null); } }}>
