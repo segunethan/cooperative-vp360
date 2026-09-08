@@ -28,7 +28,7 @@ serve(async (req) => {
     const siteUrl = Deno.env.get("SITE_URL");
     const acceptUrl = siteUrl
       ? `${siteUrl}/accept-invite`
-      : (redirectTo ?? "https://jollify.app/accept-invite");
+      : (redirectTo ?? "https://member.jollify.app/accept-invite");
 
     // Try invite first; if user already exists (re-invite), fall back to magic link
     let result = await supabaseAdmin.auth.admin.generateLink({

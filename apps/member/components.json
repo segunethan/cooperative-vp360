@@ -1,0 +1,20 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "default",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "tailwind.config.ts",
+    "css": "../../packages/shared/index.css",
+    "baseColor": "slate",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "aliases": {
+    "components": "@/components",
+    "utils": "@jollify/shared/lib/utils",
+    "ui": "@jollify/shared/components/ui",
+    "lib": "@/lib",
+    "hooks": "@jollify/shared/hooks"
+  }
+}

@@ -1,17 +1,18 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "jollify",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "build:dev": "vite build --mode development",
+    "dev:admin": "bun --filter admin dev",
+    "dev:member": "bun --filter member dev",
+    "build": "bun --filter '*' build",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test": "bun --filter '*' test"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
