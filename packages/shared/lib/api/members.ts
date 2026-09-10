@@ -320,7 +320,8 @@ export const sendMemberInviteEmail = async (
   cooperativeName: string,
   cooperativeNumber?: string | null
 ): Promise<void> => {
-  const redirectTo = `${window.location.origin}/accept-invite`;
+  const memberAppUrl = import.meta.env.VITE_MEMBER_APP_URL ?? "https://member.jollify.app";
+  const redirectTo = `${memberAppUrl}/accept-invite`;
   const { error } = await supabase.functions.invoke("invite-member", {
     body: { memberNumber, memberName, memberEmail, cooperativeName, cooperativeNumber: cooperativeNumber ?? null, redirectTo },
   });
