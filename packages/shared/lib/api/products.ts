@@ -189,6 +189,34 @@ export const fetchAllProducts = async (): Promise<Product[]> => {
   return (data ?? []).map(toProduct);
 };
 
+export interface ProductSubscriber {
+  subscriptionId: string;
+  memberName: string;
+  memberNumber: string;
+  principalKobo: number;
+  currentBalanceKobo: number;
+  status: SubscriptionStatus;
+  investedAt: string | null;
+}
+
+export const fetchProductSubscribers = async (productId: string): Promise<ProductSubscriber[]> => {
+  const { data, error } = await supabase
+    .from("product_subscriptions")
+    .select("id, principal_kobo, current_balance_kobo, status, invested_at, members(full_name, member_number)")
+    .eq("product_id", productId)
+    .order("created_at", { ascending: false });
+  if (error) handleSupabaseError(error);
+  return (data ?? []).map((row) => ({
+    subscriptionId: row.id,
+    memberName: (row.members as unknown as { full_name: string; member_number: string } | null)?.full_name ?? "—",
+    memberNumber: (row.members as unknown as { full_name: string; member_number: string } | null)?.member_number ?? "",
+    principalKobo: row.principal_kobo,
+    currentBalanceKobo: row.current_balance_kobo,
+    status: row.status as SubscriptionStatus,
+    investedAt: row.invested_at,
+  }));
+};
+
 export interface PendingProductRequest {
   id: string;
   kind: "SUBSCRIPTION" | "TOPUP" | "WITHDRAWAL";

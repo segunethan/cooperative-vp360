@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@jollify/shared/components/ui/table";
-import { Plus, TrendingUp, Pencil, Inbox } from "lucide-react";
+import { Plus, TrendingUp, Pencil, Inbox, Users } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchAllProducts,
@@ -27,6 +27,7 @@ import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import ProductFormDialog, { ICON_MAP } from "@/components/cooperative/products/ProductFormDialog";
 import PublishRateDialog from "@/components/cooperative/products/PublishRateDialog";
+import ProductSubscribersDialog from "@/components/cooperative/products/ProductSubscribersDialog";
 
 const requestKindLabel: Record<string, string> = {
   SUBSCRIPTION: "New Subscription",
@@ -46,6 +47,7 @@ const Products = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [rateProduct, setRateProduct] = useState<Product | null>(null);
+  const [subscribersProduct, setSubscribersProduct] = useState<Product | null>(null);
 
   const { data: products = [], isLoading: loadingProducts } = useQuery({
     queryKey: ["products"],
@@ -148,10 +150,15 @@ const Products = () => {
                           <p className="text-xs text-muted-foreground">
                             Min. investment: <span className="font-medium text-foreground">{formatMoneyFull(p.minInvestmentKobo)}</span>
                           </p>
-                          <Button variant="outline" size="sm" className="w-full" onClick={() => { setEditingProduct(p); setFormOpen(true); }}>
-                            <Pencil className="h-3.5 w-3.5 mr-2" />
-                            Edit
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="sm" className="flex-1" onClick={() => setSubscribersProduct(p)}>
+                              <Users className="h-3.5 w-3.5 mr-2" />
+                              Subscribers
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => { setEditingProduct(p); setFormOpen(true); }}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </CardContent>
                       </Card>
                     );
@@ -264,6 +271,7 @@ const Products = () => {
         onClose={() => { setFormOpen(false); setEditingProduct(null); }}
       />
       <PublishRateDialog product={rateProduct} onClose={() => setRateProduct(null)} />
+      <ProductSubscribersDialog product={subscribersProduct} onClose={() => setSubscribersProduct(null)} />
     </div>
   );
 };
