@@ -6,6 +6,7 @@ export type ProductStatus = "ACTIVE" | "DRAFT";
 export type SubscriptionStatus = "PENDING" | "ACTIVE" | "REJECTED" | "EXITED";
 export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED";
 export type SubscriptionRequestType = "TOPUP" | "WITHDRAWAL";
+export type FundingSource = "EXTERNAL_PAYMENT" | "CONTRIBUTION_TRANSFER";
 export type LedgerEntryType = "INITIAL" | "RATE_APPLIED" | "TOPUP" | "WITHDRAWAL";
 
 export interface Product {
@@ -147,6 +148,8 @@ export const subscribeToProduct = async (params: {
   tenorMonths?: number;
   variant?: string;
   targetAmountKobo?: number;
+  fundingSource: FundingSource;
+  receiptUrl?: string;
 }): Promise<void> => {
   const { error } = await supabase.from("product_subscriptions").insert({
     tenant_id: params.tenantId,
@@ -158,6 +161,8 @@ export const subscribeToProduct = async (params: {
     variant: params.variant ?? null,
     target_amount_kobo: params.targetAmountKobo ?? null,
     status: "PENDING",
+    funding_source: params.fundingSource,
+    receipt_url: params.receiptUrl ?? null,
   });
   if (error) handleSupabaseError(error);
 };
@@ -169,6 +174,8 @@ export const requestSubscriptionChange = async (params: {
   requestType: SubscriptionRequestType;
   amountKobo: number;
   notes?: string;
+  fundingSource?: FundingSource;
+  receiptUrl?: string;
 }): Promise<void> => {
   const { error } = await supabase.from("product_subscription_requests").insert({
     tenant_id: params.tenantId,
@@ -177,8 +184,40 @@ export const requestSubscriptionChange = async (params: {
     request_type: params.requestType,
     amount_kobo: params.amountKobo,
     notes: params.notes ?? null,
+    funding_source: params.requestType === "TOPUP" ? params.fundingSource : null,
+    receipt_url: params.requestType === "TOPUP" ? params.receiptUrl ?? null : null,
   });
   if (error) handleSupabaseError(error);
+};
+
+// ── Available contribution balance (for "move from my contributions" funding) ──
+
+export const fetchAvailableContributionBalance = async (memberId: string): Promise<number> => {
+  const [{ data: contribs }, { data: subs }, { data: reqs }] = await Promise.all([
+    supabase.from("contributions").select("amount_kobo, status").eq("member_id", memberId),
+    supabase
+      .from("product_subscriptions")
+      .select("principal_kobo, funding_source, status")
+      .eq("member_id", memberId),
+    supabase
+      .from("product_subscription_requests")
+      .select("amount_kobo, funding_source, status, request_type")
+      .eq("member_id", memberId),
+  ]);
+
+  const totalCompleted = (contribs ?? [])
+    .filter((c) => c.status === "COMPLETED")
+    .reduce((sum, c) => sum + c.amount_kobo, 0);
+
+  const usedViaSubscriptions = (subs ?? [])
+    .filter((s) => s.funding_source === "CONTRIBUTION_TRANSFER" && s.status !== "REJECTED")
+    .reduce((sum, s) => sum + s.principal_kobo, 0);
+
+  const usedViaTopups = (reqs ?? [])
+    .filter((r) => r.request_type === "TOPUP" && r.funding_source === "CONTRIBUTION_TRANSFER" && r.status !== "REJECTED")
+    .reduce((sum, r) => sum + r.amount_kobo, 0);
+
+  return Math.max(0, totalCompleted - usedViaSubscriptions - usedViaTopups);
 };
 
 // ── Admin-facing reads ──────────────────────────────────────────────────────
@@ -225,18 +264,20 @@ export interface PendingProductRequest {
   productName: string;
   amountKobo: number;
   requestedAt: string;
+  fundingSource: FundingSource | null;
+  receiptUrl: string | null;
 }
 
 export const fetchPendingProductRequests = async (): Promise<PendingProductRequest[]> => {
   const [{ data: subs, error: subsError }, { data: reqs, error: reqsError }] = await Promise.all([
     supabase
       .from("product_subscriptions")
-      .select("id, principal_kobo, created_at, members(full_name, email), products(name)")
+      .select("id, principal_kobo, created_at, funding_source, receipt_url, members(full_name, email), products(name)")
       .eq("status", "PENDING")
       .order("created_at", { ascending: true }),
     supabase
       .from("product_subscription_requests")
-      .select("id, request_type, amount_kobo, requested_at, members(full_name, email), product_subscriptions(products(name))")
+      .select("id, request_type, amount_kobo, requested_at, funding_source, receipt_url, members(full_name, email), product_subscriptions(products(name))")
       .eq("status", "PENDING")
       .order("requested_at", { ascending: true }),
   ]);
@@ -251,6 +292,8 @@ export const fetchPendingProductRequests = async (): Promise<PendingProductReque
     productName: (s.products as unknown as { name: string } | null)?.name ?? "—",
     amountKobo: s.principal_kobo,
     requestedAt: s.created_at,
+    fundingSource: s.funding_source as FundingSource,
+    receiptUrl: s.receipt_url,
   }));
 
   const fromReqs: PendingProductRequest[] = (reqs ?? []).map((r) => ({
@@ -262,6 +305,8 @@ export const fetchPendingProductRequests = async (): Promise<PendingProductReque
       (r.product_subscriptions as unknown as { products: { name: string } | null } | null)?.products?.name ?? "—",
     amountKobo: r.amount_kobo,
     requestedAt: r.requested_at,
+    fundingSource: (r.funding_source as FundingSource) ?? null,
+    receiptUrl: r.receipt_url,
   }));
 
   return [...fromSubs, ...fromReqs].sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));

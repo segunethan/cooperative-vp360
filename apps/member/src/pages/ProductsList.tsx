@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { TrendingUp, PiggyBank, Wallet, Banknote, Coins, ChevronRight } from "lucide-react";
 import { formatMoneyFull } from "@jollify/shared/lib/money";
-import { fetchActiveProducts, fetchMemberSubscriptions, type Product, type ProductSubscription } from "@jollify/shared/lib/api/products";
-import ProductDetailDialog from "./ProductDetailDialog";
+import { fetchActiveProducts, fetchMemberSubscriptions } from "@jollify/shared/lib/api/products";
+import { useMemberProfile } from "@/hooks/useMemberProfile";
+import { useQuery } from "@tanstack/react-query";
 
 const ICON_MAP: Record<string, typeof PiggyBank> = {
   "piggy-bank": PiggyBank,
@@ -19,54 +20,44 @@ const statusBadge: Record<string, string> = {
   EXITED: "bg-gray-50 text-gray-600 border-gray-200",
 };
 
-interface Props {
-  memberId: string;
-  tenantId: string;
-  memberName: string;
-  memberEmail: string;
-  cooperativeName: string;
-}
+const ProductsList = () => {
+  const { data: profile } = useMemberProfile();
 
-const ProductsSection = ({ memberId, tenantId, memberName, memberEmail, cooperativeName }: Props) => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [subscriptions, setSubscriptions] = useState<ProductSubscription[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const { data: products = [], isLoading: loadingProducts } = useQuery({
+    queryKey: ["active-products"],
+    queryFn: fetchActiveProducts,
+  });
 
-  const load = async () => {
-    setLoading(true);
-    const [p, s] = await Promise.all([fetchActiveProducts(), fetchMemberSubscriptions(memberId)]);
-    setProducts(p);
-    setSubscriptions(s);
-    setLoading(false);
-  };
-
-  useEffect(() => { load(); }, [memberId]);
+  const { data: subscriptions = [] } = useQuery({
+    queryKey: ["member-subscriptions", profile?.memberId],
+    queryFn: () => fetchMemberSubscriptions(profile!.memberId),
+    enabled: !!profile,
+  });
 
   const subscriptionFor = (productId: string) =>
     subscriptions.find((s) => s.productId === productId && s.status !== "EXITED" && s.status !== "REJECTED") ?? null;
 
   return (
-    <div className="bg-white rounded-xl border border-border overflow-hidden">
-      <div className="px-5 py-4 border-b border-border flex items-center gap-2">
-        <TrendingUp className="h-4 w-4 text-muted-foreground" />
-        <h2 className="font-semibold text-foreground text-sm">Investment Products</h2>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-xl font-bold text-foreground">Investment Products</h1>
+        <p className="text-sm text-muted-foreground">Browse products, read the terms, and subscribe.</p>
       </div>
 
-      {loading ? (
-        <div className="px-5 py-10 text-center text-sm text-muted-foreground">Loading products…</div>
+      {loadingProducts ? (
+        <div className="py-16 text-center text-sm text-muted-foreground">Loading products…</div>
       ) : products.length === 0 ? (
-        <div className="px-5 py-10 text-center text-sm text-muted-foreground">No investment products available yet.</div>
+        <div className="py-16 text-center text-sm text-muted-foreground">No investment products available yet.</div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {products.map((p) => {
             const Icon = ICON_MAP[p.icon] ?? PiggyBank;
             const sub = subscriptionFor(p.id);
             return (
-              <button
+              <Link
                 key={p.id}
-                onClick={() => setSelectedProduct(p)}
-                className="text-left rounded-xl border border-border p-4 hover:border-primary/40 hover:bg-primary/4 transition-colors"
+                to={`/member/products/${p.slug}`}
+                className="rounded-xl border border-border p-4 bg-white hover:border-primary/40 hover:bg-primary/4 transition-colors"
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -87,27 +78,13 @@ const ProductsSection = ({ memberId, tenantId, memberName, memberEmail, cooperat
                 <div className="flex items-center gap-1 text-xs font-semibold text-primary mt-3">
                   View more <ChevronRight className="h-3 w-3" />
                 </div>
-              </button>
+              </Link>
             );
           })}
         </div>
-      )}
-
-      {selectedProduct && (
-        <ProductDetailDialog
-          product={selectedProduct}
-          memberId={memberId}
-          tenantId={tenantId}
-          memberName={memberName}
-          memberEmail={memberEmail}
-          cooperativeName={cooperativeName}
-          subscription={subscriptionFor(selectedProduct.id)}
-          onClose={() => setSelectedProduct(null)}
-          onChanged={load}
-        />
       )}
     </div>
   );
 };
 
-export default ProductsSection;
+export default ProductsList;

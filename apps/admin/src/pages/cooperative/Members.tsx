@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@jollify/shared/components/ui/button";
 import { Plus, Upload } from "lucide-react";
 import { useToast } from "@jollify/shared/hooks/use-toast";
@@ -6,14 +7,12 @@ import { useAuth } from "@/context/AuthContext";
 import MemberStatsCards from "@/components/cooperative/members/MemberStatsCards";
 import MemberDirectory from "@/components/cooperative/members/MemberDirectory";
 import AddMemberDialog from "@/components/cooperative/members/AddMemberDialog";
-import KYCVerificationDialog from "@/components/cooperative/members/KYCVerificationDialog";
 import BulkImportDialog from "@/components/cooperative/members/BulkImportDialog";
 import {
   fetchAllMembers,
   approveMemberApplication,
   suspendMember,
   exitMember,
-  markMemberKycVerified,
   sendMemberInviteEmail,
 } from "@jollify/shared/lib/api/members";
 import { useState } from "react";
@@ -22,11 +21,10 @@ const Members = () => {
   const { toast } = useToast();
   const { tenant } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [kycOpen, setKycOpen] = useState(false);
-  const [kycMember, setKycMember] = useState({ name: "", id: "" });
 
   // ── Data ──────────────────────────────────────────────────────────────────
   const { data: members = [], isLoading } = useQuery({
@@ -72,16 +70,6 @@ const Members = () => {
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
-  const kycMutation = useMutation({
-    mutationFn: markMemberKycVerified,
-    onSuccess: (_, memberNumber) => {
-      invalidateMembers();
-      setKycOpen(false);
-      toast({ title: "KYC Verified", description: `${memberNumber} identity has been verified.` });
-    },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
-  });
-
   const resendInviteMutation = useMutation({
     mutationFn: async (memberNumber: string) => {
       const member = members.find((m) => m.id === memberNumber);
@@ -106,15 +94,7 @@ const Members = () => {
   const handleExit = (id: string) => exitMutation.mutate(id);
   const handleEdit = (id: string) => toast({ title: "Edit Member", description: `Opening editor for ${id}…` });
 
-  const handleVerifyKYC = (id: string) => {
-    const member = members.find((m) => m.id === id);
-    if (member) {
-      setKycMember({ name: member.name, id: member.id });
-      setKycOpen(true);
-    }
-  };
-
-  const handleKycConfirm = () => kycMutation.mutate(kycMember.id);
+  const handleVerifyKYC = () => navigate("/cooperative/kyc");
   const handleResendInvite = (id: string) => resendInviteMutation.mutate(id);
 
   return (
@@ -156,14 +136,6 @@ const Members = () => {
         onMemberAdded={invalidateMembers}
       />
       <BulkImportDialog open={bulkOpen} onOpenChange={setBulkOpen} onImported={invalidateMembers} />
-      <KYCVerificationDialog
-        open={kycOpen}
-        onOpenChange={setKycOpen}
-        memberName={kycMember.name}
-        memberId={kycMember.id}
-        onConfirm={handleKycConfirm}
-        loading={kycMutation.isPending}
-      />
     </div>
   );
 };

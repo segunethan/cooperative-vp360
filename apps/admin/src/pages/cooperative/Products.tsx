@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@jollify/shared/components/ui/table";
-import { Plus, TrendingUp, Pencil, Inbox, Users } from "lucide-react";
+import { Plus, TrendingUp, Pencil, Inbox, Users, Receipt } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchAllProducts,
@@ -177,6 +177,7 @@ const Products = () => {
                       <TableHead>Member</TableHead>
                       <TableHead>Product</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
+                      <TableHead>Funding</TableHead>
                       <TableHead>Requested</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -184,11 +185,11 @@ const Products = () => {
                   <TableBody>
                     {loadingRequests ? (
                       Array.from({ length: 3 }).map((_, i) => (
-                        <TableRow key={i}>{Array.from({ length: 6 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}</TableRow>
+                        <TableRow key={i}>{Array.from({ length: 7 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}</TableRow>
                       ))
                     ) : requests.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6}>
+                        <TableCell colSpan={7}>
                           <div className="flex flex-col items-center py-10 text-center text-muted-foreground">
                             <Inbox className="h-10 w-10 mb-3 opacity-30" />
                             <p className="font-medium">No pending requests</p>
@@ -204,6 +205,21 @@ const Products = () => {
                           <TableCell>{r.memberName}</TableCell>
                           <TableCell>{r.productName}</TableCell>
                           <TableCell className="text-right font-medium">{formatMoneyFull(r.amountKobo)}</TableCell>
+                          <TableCell>
+                            {r.fundingSource === "EXTERNAL_PAYMENT" ? (
+                              r.receiptUrl ? (
+                                <a href={r.receiptUrl} target="_blank" rel="noreferrer" className="text-primary text-xs font-medium hover:underline flex items-center gap-1">
+                                  <Receipt className="h-3 w-3" /> View Receipt
+                                </a>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">No receipt</span>
+                              )
+                            ) : r.fundingSource === "CONTRIBUTION_TRANSFER" ? (
+                              <span className="text-xs text-muted-foreground">From contributions</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                           <TableCell>{new Date(r.requestedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">

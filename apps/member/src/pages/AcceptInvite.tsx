@@ -52,7 +52,7 @@ const AcceptInvite = () => {
     setLoading(false);
     if (updateError) { setError(updateError.message); return; }
     setStage("success");
-    setTimeout(() => navigate("/member"), 1500);
+    setTimeout(() => navigate("/member/kyc"), 1500);
   };
 
   // ── Loading ───────────────────────────────────────────────────────────────
