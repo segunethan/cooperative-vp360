@@ -18,8 +18,8 @@ import {
   AlertTriangle,
   Plus,
   Download,
-  Settings,
   Landmark,
+  Banknote,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -27,11 +27,15 @@ import {
   fetchActiveLoans,
   approveLoanApplication,
   rejectLoanApplication,
+  fetchPendingLoanTopups,
+  reviewLoanTopup,
 } from "@jollify/shared/lib/api/loans";
-import { formatMoney } from "@jollify/shared/lib/money";
+import { formatMoney, formatMoneyFull } from "@jollify/shared/lib/money";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import LoanApplicationDialog from "@/components/cooperative/loans/LoanApplicationDialog";
+import LoanLedgerDialog from "@/components/cooperative/loans/LoanLedgerDialog";
+import RecordRepaymentDialog from "@/components/cooperative/loans/RecordRepaymentDialog";
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -61,6 +65,8 @@ const Loans = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [newLoanOpen, setNewLoanOpen] = useState(false);
+  const [ledgerLoan, setLedgerLoan] = useState<{ id: string; loanNumber: string } | null>(null);
+  const [repaymentLoan, setRepaymentLoan] = useState<{ id: string; loanNumber: string } | null>(null);
 
   const { data: applications = [], isLoading: loadingApplications } = useQuery({
     queryKey: ["loan-applications"],
@@ -72,10 +78,26 @@ const Loans = () => {
     queryFn: fetchActiveLoans,
   });
 
+  const { data: topupRequests = [], isLoading: loadingTopups } = useQuery({
+    queryKey: ["loan-topup-requests"],
+    queryFn: fetchPendingLoanTopups,
+  });
+
   const invalidateLoans = () => {
     queryClient.invalidateQueries({ queryKey: ["loan-applications"] });
     queryClient.invalidateQueries({ queryKey: ["active-loans"] });
   };
+
+  const topupMutation = useMutation({
+    mutationFn: ({ requestId, approve }: { requestId: string; approve: boolean }) =>
+      reviewLoanTopup(requestId, approve, user?.id ?? ""),
+    onSuccess: (_, { approve }) => {
+      toast.success(approve ? "Top-up approved." : "Top-up rejected.");
+      queryClient.invalidateQueries({ queryKey: ["loan-topup-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["loan-ledger"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const approveMutation = useMutation({
     mutationFn: ({ loanId }: { loanId: string }) =>
@@ -109,10 +131,6 @@ const Loans = () => {
           <p className="text-muted-foreground">Manage loan applications and active portfolio</p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm">
-            <Settings className="h-4 w-4 mr-2" />
-            Loan Products
-          </Button>
           <Button variant="outline" size="sm">
             <Download className="h-4 w-4 mr-2" />
             Portfolio Report
@@ -197,7 +215,14 @@ const Loans = () => {
                 )}
               </TabsTrigger>
               <TabsTrigger value="active">Active Loans</TabsTrigger>
-              <TabsTrigger value="products">Loan Products</TabsTrigger>
+              <TabsTrigger value="topups">
+                Top-up Requests
+                {topupRequests.length > 0 && (
+                  <span className="ml-2 bg-warning text-warning-foreground text-xs px-1.5 py-0.5 rounded-full">
+                    {topupRequests.length}
+                  </span>
+                )}
+              </TabsTrigger>
             </TabsList>
 
             {/* ── Applications Tab ── */}
@@ -343,7 +368,23 @@ const Loans = () => {
                             <TableCell>{loan.dueDate}</TableCell>
                             <TableCell>{loan.disbursedDate}</TableCell>
                             <TableCell>
-                              <Button variant="ghost" size="sm">View</Button>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setLedgerLoan({ id: loan.id, loanNumber: loan.loanNumber })}
+                                >
+                                  History
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-primary hover:text-primary"
+                                  onClick={() => setRepaymentLoan({ id: loan.id, loanNumber: loan.loanNumber })}
+                                >
+                                  Record Repayment
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))
@@ -354,36 +395,63 @@ const Loans = () => {
               </div>
             </TabsContent>
 
-            {/* ── Loan Products Tab (static for now) ── */}
-            <TabsContent value="products">
+            {/* ── Top-up Requests Tab ── */}
+            <TabsContent value="topups">
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium">Loan Products</h3>
-                  <Button size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Product
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {[
-                    { name: "Personal Loan", rate: "12%", max: "₦1,000,000", term: "24 months", fee: "2%" },
-                    { name: "Emergency Loan", rate: "8%", max: "₦500,000", term: "12 months", fee: "1%" },
-                    { name: "Business Loan", rate: "15%", max: "₦2,000,000", term: "36 months", fee: "3%" },
-                  ].map((product) => (
-                    <Card key={product.name}>
-                      <CardContent className="p-4">
-                        <h4 className="font-medium mb-2">{product.name}</h4>
-                        <div className="space-y-2 text-sm">
-                          <p><span className="text-muted-foreground">Interest Rate:</span> {product.rate} per annum</p>
-                          <p><span className="text-muted-foreground">Max Amount:</span> {product.max}</p>
-                          <p><span className="text-muted-foreground">Max Term:</span> {product.term}</p>
-                          <p><span className="text-muted-foreground">Processing Fee:</span> {product.fee}</p>
-                        </div>
-                        <Button variant="outline" size="sm" className="w-full mt-3">Configure</Button>
-                      </CardContent>
-                    </Card>
-                  ))}
+                <h3 className="text-lg font-medium">Loan Top-up Requests</h3>
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Loan</TableHead>
+                        <TableHead>Member</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead>Requested</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loadingTopups ? (
+                        Array.from({ length: 3 }).map((_, i) => <SkeletonRow key={i} cols={5} />)
+                      ) : topupRequests.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5}>
+                            <div className="flex flex-col items-center py-10 text-center text-muted-foreground">
+                              <Banknote className="h-10 w-10 mb-3 opacity-30" />
+                              <p className="font-medium">No pending top-up requests</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        topupRequests.map((r) => (
+                          <TableRow key={r.id}>
+                            <TableCell className="font-mono text-sm">{r.loanNumber}</TableCell>
+                            <TableCell>{r.memberName}</TableCell>
+                            <TableCell className="text-right font-medium">{formatMoneyFull(r.amountKobo)}</TableCell>
+                            <TableCell>{new Date(r.requestedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost" size="sm" className="text-success hover:text-success"
+                                  disabled={topupMutation.isPending}
+                                  onClick={() => topupMutation.mutate({ requestId: r.id, approve: true })}
+                                >
+                                  Approve
+                                </Button>
+                                <Button
+                                  variant="ghost" size="sm" className="text-destructive hover:text-destructive"
+                                  disabled={topupMutation.isPending}
+                                  onClick={() => topupMutation.mutate({ requestId: r.id, approve: false })}
+                                >
+                                  Reject
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
             </TabsContent>
@@ -394,6 +462,16 @@ const Loans = () => {
         open={newLoanOpen}
         onClose={() => setNewLoanOpen(false)}
         onSubmitted={invalidateLoans}
+      />
+      <LoanLedgerDialog
+        loanId={ledgerLoan?.id ?? null}
+        loanNumber={ledgerLoan?.loanNumber ?? ""}
+        onClose={() => setLedgerLoan(null)}
+      />
+      <RecordRepaymentDialog
+        loanId={repaymentLoan?.id ?? null}
+        loanNumber={repaymentLoan?.loanNumber ?? ""}
+        onClose={() => setRepaymentLoan(null)}
       />
     </div>
   );

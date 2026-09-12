@@ -162,3 +162,156 @@ export const disburseLoanToMember = async (loanId: string, paystackRef?: string)
     .eq("id", loanId);
   if (error) handleSupabaseError(error);
 };
+
+// ── Repayment ledger ─────────────────────────────────────────────────────────
+
+export interface LoanLedgerRow {
+  id: string;
+  date: string;
+  type: "DISBURSEMENT" | "REPAYMENT" | "TOPUP";
+  amountKobo: number;
+  principalPortionKobo: number;
+  interestPortionKobo: number;
+  balanceBeforeKobo: number;
+  balanceAfterKobo: number;
+}
+
+export const fetchLoanLedger = async (loanId: string): Promise<LoanLedgerRow[]> => {
+  const { data: loan, error: loanError } = await supabase
+    .from("loans")
+    .select("principal_kobo, disbursed_at, created_at")
+    .eq("id", loanId)
+    .single();
+  if (loanError) handleSupabaseError(loanError);
+
+  const [{ data: repayments, error: repaymentsError }, { data: topups, error: topupsError }] = await Promise.all([
+    supabase
+      .from("loan_repayments")
+      .select("id, amount_kobo, principal_portion_kobo, interest_portion_kobo, paid_at")
+      .eq("loan_id", loanId)
+      .order("paid_at", { ascending: true }),
+    supabase
+      .from("loan_topup_requests")
+      .select("id, amount_kobo, reviewed_at")
+      .eq("loan_id", loanId)
+      .eq("status", "APPROVED")
+      .order("reviewed_at", { ascending: true }),
+  ]);
+  if (repaymentsError) handleSupabaseError(repaymentsError);
+  if (topupsError) handleSupabaseError(topupsError);
+
+  type Event = { date: string; type: "REPAYMENT" | "TOPUP"; id: string; amountKobo: number; principalPortionKobo: number; interestPortionKobo: number };
+
+  const events: Event[] = [
+    ...(repayments ?? []).map((r) => ({
+      date: r.paid_at as string,
+      type: "REPAYMENT" as const,
+      id: r.id as string,
+      amountKobo: r.amount_kobo as number,
+      principalPortionKobo: r.principal_portion_kobo as number,
+      interestPortionKobo: r.interest_portion_kobo as number,
+    })),
+    ...(topups ?? []).map((t) => ({
+      date: t.reviewed_at as string,
+      type: "TOPUP" as const,
+      id: t.id as string,
+      amountKobo: t.amount_kobo as number,
+      principalPortionKobo: -(t.amount_kobo as number), // increases outstanding
+      interestPortionKobo: 0,
+    })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+
+  const rows: LoanLedgerRow[] = [];
+  let balance = 0;
+
+  const disbursementDate = (loan?.disbursed_at as string) ?? (loan?.created_at as string);
+  rows.push({
+    id: "disbursement",
+    date: disbursementDate,
+    type: "DISBURSEMENT",
+    amountKobo: loan?.principal_kobo ?? 0,
+    principalPortionKobo: loan?.principal_kobo ?? 0,
+    interestPortionKobo: 0,
+    balanceBeforeKobo: 0,
+    balanceAfterKobo: loan?.principal_kobo ?? 0,
+  });
+  balance = loan?.principal_kobo ?? 0;
+
+  for (const e of events) {
+    const balanceBefore = balance;
+    // repayments reduce outstanding by their principal portion; top-ups increase it
+    balance = e.type === "REPAYMENT" ? balance - e.principalPortionKobo : balance + e.amountKobo;
+    rows.push({
+      id: e.id,
+      date: e.date,
+      type: e.type,
+      amountKobo: e.amountKobo,
+      principalPortionKobo: e.type === "REPAYMENT" ? e.principalPortionKobo : e.amountKobo,
+      interestPortionKobo: e.interestPortionKobo,
+      balanceBeforeKobo: balanceBefore,
+      balanceAfterKobo: balance,
+    });
+  }
+
+  return rows;
+};
+
+export const recordLoanRepayment = async (
+  loanId: string,
+  amountKobo: number,
+  channel: string,
+  paidAt: string
+): Promise<void> => {
+  const { error } = await supabase.rpc("record_loan_repayment", {
+    p_loan_id: loanId,
+    p_amount_kobo: amountKobo,
+    p_channel: channel,
+    p_paid_at: paidAt,
+    p_reference: generatePaymentReference("REPAY"),
+  });
+  if (error) handleSupabaseError(error);
+};
+
+export const requestLoanTopup = async (params: {
+  tenantId: string;
+  loanId: string;
+  memberId: string;
+  amountKobo: number;
+  notes?: string;
+}): Promise<void> => {
+  const { error } = await supabase.from("loan_topup_requests").insert({
+    tenant_id: params.tenantId,
+    loan_id: params.loanId,
+    member_id: params.memberId,
+    amount_kobo: params.amountKobo,
+    notes: params.notes ?? null,
+  });
+  if (error) handleSupabaseError(error);
+};
+
+export const fetchPendingLoanTopups = async (): Promise<
+  { id: string; loanNumber: string; memberName: string; amountKobo: number; requestedAt: string }[]
+> => {
+  const { data, error } = await supabase
+    .from("loan_topup_requests")
+    .select("id, amount_kobo, requested_at, loans(loan_number), members(full_name)")
+    .eq("status", "PENDING")
+    .order("requested_at", { ascending: true });
+  if (error) handleSupabaseError(error);
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    loanNumber: (r.loans as unknown as { loan_number: string } | null)?.loan_number ?? "—",
+    memberName: (r.members as unknown as { full_name: string } | null)?.full_name ?? "—",
+    amountKobo: r.amount_kobo,
+    requestedAt: r.requested_at,
+  }));
+};
+
+export const reviewLoanTopup = async (requestId: string, approve: boolean, reviewerId: string): Promise<void> => {
+  const { error } = await supabase.rpc("review_loan_topup", {
+    p_request_id: requestId,
+    p_approve: approve,
+    p_reviewer: reviewerId,
+  });
+  if (error) handleSupabaseError(error);
+};

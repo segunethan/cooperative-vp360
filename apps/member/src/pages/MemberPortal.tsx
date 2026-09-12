@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { LogOut, PiggyBank, CreditCard, BadgeCheck, Plus, X } from "lucide-react";
+import { LogOut, PiggyBank, CreditCard, BadgeCheck, Plus, X, History, ArrowUpCircle } from "lucide-react";
 import { supabase } from "@jollify/shared/lib/supabase";
 import { formatMoneyFull, nairaToKobo, generatePaymentReference } from "@jollify/shared/lib/money";
 import { submitLoanApplication } from "@jollify/shared/lib/api/loans";
+import { notifyRequestSubmitted } from "@jollify/shared/lib/api/products";
 import { useAuth } from "@/context/AuthContext";
+import ProductsSection from "@/components/ProductsSection";
+import LoanHistoryDialog from "@/components/LoanHistoryDialog";
+import LoanTopupDialog from "@/components/LoanTopupDialog";
 
 interface MemberData {
   memberId: string;
@@ -18,7 +22,7 @@ interface MemberData {
   contributionTotal: number;
   loanTotal: number;
   contributions: { date: string; amount: number; status: string; reference: string }[];
-  loans: { loanNumber: string; principal: number; status: string; date: string; purpose: string }[];
+  loans: { id: string; loanNumber: string; principal: number; status: string; date: string; purpose: string }[];
 }
 
 const LOAN_PRODUCTS = [
@@ -68,6 +72,10 @@ const MemberPortal = () => {
   const [loanError, setLoanError] = useState<string | null>(null);
   const [loanLoading, setLoanLoading] = useState(false);
 
+  // Loan history / top-up dialogs
+  const [historyLoan, setHistoryLoan] = useState<{ id: string; loanNumber: string } | null>(null);
+  const [topupLoan, setTopupLoan] = useState<{ id: string; loanNumber: string } | null>(null);
+
   useEffect(() => {
     if (!user) return;
 
@@ -96,7 +104,7 @@ const MemberPortal = () => {
 
       const { data: loans } = await supabase
         .from("loans")
-        .select("loan_number, principal_kobo, status, purpose, created_at")
+        .select("id, loan_number, principal_kobo, status, purpose, created_at")
         .eq("member_id", member.id)
         .order("created_at", { ascending: false })
         .limit(5);
@@ -127,6 +135,7 @@ const MemberPortal = () => {
           reference: c.reference,
         })),
         loans: (loans ?? []).map((l) => ({
+          id: l.id,
           loanNumber: l.loan_number,
           principal: l.principal_kobo,
           status: l.status,
@@ -149,7 +158,7 @@ const MemberPortal = () => {
 
     const [{ data: contribs }, { data: loans }] = await Promise.all([
       supabase.from("contributions").select("amount_kobo, status, reference, created_at").eq("member_id", data.memberId).order("created_at", { ascending: false }).limit(10),
-      supabase.from("loans").select("loan_number, principal_kobo, status, purpose, created_at").eq("member_id", data.memberId).order("created_at", { ascending: false }).limit(5),
+      supabase.from("loans").select("id, loan_number, principal_kobo, status, purpose, created_at").eq("member_id", data.memberId).order("created_at", { ascending: false }).limit(5),
     ]);
 
     const contributionTotal = (contribs ?? []).filter((c) => c.status === "COMPLETED").reduce((s, c) => s + c.amount_kobo, 0);
@@ -166,6 +175,7 @@ const MemberPortal = () => {
         reference: c.reference,
       })),
       loans: (loans ?? []).map((l) => ({
+        id: l.id,
         loanNumber: l.loan_number,
         principal: l.principal_kobo,
         status: l.status,
@@ -221,6 +231,13 @@ const MemberPortal = () => {
     setContribOpen(false);
     setContribForm(EMPTY_CONTRIB);
     setReceiptFile(null);
+    await notifyRequestSubmitted({
+      tenantId: data.tenantId,
+      memberName: data.fullName,
+      cooperativeName: data.cooperativeName,
+      requestLabel: "Contribution",
+      amountLabel: formatMoneyFull(nairaToKobo(parseFloat(contribForm.amount))),
+    });
     await refreshData();
   };
 
@@ -248,6 +265,13 @@ const MemberPortal = () => {
       });
       setLoanOpen(false);
       setLoanForm(EMPTY_LOAN);
+      await notifyRequestSubmitted({
+        tenantId: data.tenantId,
+        memberName: data.fullName,
+        cooperativeName: data.cooperativeName,
+        requestLabel: "Loan application",
+        amountLabel: formatMoneyFull(nairaToKobo(parseFloat(loanForm.principalNaira))),
+      });
       await refreshData();
     } catch (err) {
       setLoanError((err as Error).message);
@@ -326,12 +350,12 @@ const MemberPortal = () => {
             <p className="text-white/50 text-xs font-semibold uppercase tracking-widest mb-1">Member Account</p>
             <h1 className="text-2xl font-bold tracking-tight mb-1">{data.fullName}</h1>
             <p className="text-white/50 text-sm mb-5">{data.email}</p>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <div>
                 <p className="text-white/40 text-[11px] uppercase tracking-wider mb-0.5">Member ID</p>
                 <p className="text-white font-mono font-bold text-lg tracking-wider">{data.memberNumber}</p>
               </div>
-              <div className="h-8 w-px bg-white/10" />
+              <div className="h-8 w-px bg-white/10 hidden sm:block" />
               <div>
                 <p className="text-white/40 text-[11px] uppercase tracking-wider mb-0.5">Status</p>
                 <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${statusColor[data.status] ?? "bg-gray-50 text-gray-600 border-gray-200"}`}>
@@ -340,7 +364,7 @@ const MemberPortal = () => {
               </div>
               {data.kycVerified && (
                 <>
-                  <div className="h-8 w-px bg-white/10" />
+                  <div className="h-8 w-px bg-white/10 hidden sm:block" />
                   <div className="flex items-center gap-1 text-emerald-400 text-xs font-semibold">
                     <BadgeCheck className="h-4 w-4" />
                     KYC Verified
@@ -352,7 +376,7 @@ const MemberPortal = () => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="bg-white rounded-xl border border-border p-5">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-8 h-8 rounded-lg bg-primary/8 flex items-center justify-center">
@@ -412,6 +436,15 @@ const MemberPortal = () => {
           )}
         </div>
 
+        {/* Investment Products */}
+        <ProductsSection
+          memberId={data.memberId}
+          tenantId={data.tenantId}
+          memberName={data.fullName}
+          memberEmail={data.email}
+          cooperativeName={data.cooperativeName}
+        />
+
         {/* Loans */}
         <div className="bg-white rounded-xl border border-border overflow-hidden">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between">
@@ -432,19 +465,37 @@ const MemberPortal = () => {
           ) : (
             <div className="divide-y divide-border">
               {data.loans.map((l) => (
-                <div key={l.loanNumber} className="px-5 py-3.5 flex items-center justify-between">
+                <div key={l.loanNumber} className="px-5 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium text-foreground">{formatMoneyFull(l.principal)}</p>
                     <p className="text-xs text-muted-foreground">{l.loanNumber} · {l.purpose} · {l.date}</p>
                   </div>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                    l.status === "ACTIVE" ? "bg-blue-50 text-blue-700 border-blue-200" :
-                    l.status === "REPAID" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                    l.status === "PENDING" ? "bg-amber-50 text-amber-700 border-amber-200" :
-                    "bg-gray-50 text-gray-600 border-gray-200"
-                  }`}>
-                    {l.status === "PENDING" ? "Pending Review" : l.status.charAt(0) + l.status.slice(1).toLowerCase()}
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                      l.status === "ACTIVE" ? "bg-blue-50 text-blue-700 border-blue-200" :
+                      l.status === "REPAID" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                      l.status === "PENDING" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                      "bg-gray-50 text-gray-600 border-gray-200"
+                    }`}>
+                      {l.status === "PENDING" ? "Pending Review" : l.status.charAt(0) + l.status.slice(1).toLowerCase()}
+                    </span>
+                    {(l.status === "ACTIVE" || l.status === "REPAID") && (
+                      <button
+                        onClick={() => setHistoryLoan({ id: l.id, loanNumber: l.loanNumber })}
+                        className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <History className="h-3 w-3" /> History
+                      </button>
+                    )}
+                    {l.status === "ACTIVE" && (
+                      <button
+                        onClick={() => setTopupLoan({ id: l.id, loanNumber: l.loanNumber })}
+                        className="flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+                      >
+                        <ArrowUpCircle className="h-3 w-3" /> Top-up
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -700,6 +751,27 @@ const MemberPortal = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {historyLoan && (
+        <LoanHistoryDialog
+          loanId={historyLoan.id}
+          loanNumber={historyLoan.loanNumber}
+          onClose={() => setHistoryLoan(null)}
+        />
+      )}
+
+      {topupLoan && (
+        <LoanTopupDialog
+          loanId={topupLoan.id}
+          loanNumber={topupLoan.loanNumber}
+          tenantId={data.tenantId}
+          memberId={data.memberId}
+          memberName={data.fullName}
+          cooperativeName={data.cooperativeName}
+          onClose={() => setTopupLoan(null)}
+          onSubmitted={refreshData}
+        />
       )}
     </div>
   );

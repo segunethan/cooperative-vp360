@@ -15,6 +15,7 @@ import Members from "./pages/cooperative/Members";
 import MemberProfile from "./pages/cooperative/MemberProfile";
 import Contributions from "./pages/cooperative/Contributions";
 import Loans from "./pages/cooperative/Loans";
+import Products from "./pages/cooperative/Products";
 import Dividends from "./pages/cooperative/Dividends";
 import Announcements from "./pages/cooperative/Announcements";
 import Reports from "./pages/cooperative/Reports";
@@ -49,6 +50,7 @@ const App = () => (
               <Route path="members/:memberId" element={<MemberProfile />} />
               <Route path="contributions" element={<Contributions />} />
               <Route path="loans" element={<Loans />} />
+              <Route path="products" element={<Products />} />
               <Route path="dividends" element={<Dividends />} />
               <Route path="announcements" element={<Announcements />} />
               <Route path="reports" element={<Reports />} />
