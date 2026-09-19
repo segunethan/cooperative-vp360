@@ -226,6 +226,16 @@ const ProductDetail = () => {
 
       {fundingSource === "EXTERNAL_PAYMENT" && (
         <div className="space-y-3 pt-1">
+          {product.creditAccountInfo ? (
+            <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 mb-1">Account to Credit</p>
+              <p className="text-sm text-emerald-800 whitespace-pre-line">{product.creditAccountInfo}</p>
+            </div>
+          ) : (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+              No payment account has been set up for this product yet. Contact your cooperative admin before paying.
+            </div>
+          )}
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Payment Channel</label>
             <select

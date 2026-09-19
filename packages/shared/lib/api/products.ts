@@ -22,6 +22,7 @@ export interface Product {
   tenorOptions: number[] | null;
   status: ProductStatus;
   terms: Record<string, unknown>;
+  creditAccountInfo: string | null;
 }
 
 export interface ProductSubscription {
@@ -61,6 +62,7 @@ const toProduct = (row: Record<string, unknown>): Product => ({
   tenorOptions: (row.tenor_options as number[]) ?? null,
   status: row.status as ProductStatus,
   terms: (row.terms as Record<string, unknown>) ?? {},
+  creditAccountInfo: (row.credit_account_info as string) ?? null,
 });
 
 const toSubscription = (row: Record<string, unknown>): ProductSubscription => ({
@@ -103,6 +105,13 @@ export const fetchProductBySlug = async (slug: string): Promise<Product> => {
   const { data, error } = await supabase.from("products").select("*").eq("slug", slug).maybeSingle();
   if (error) handleSupabaseError(error);
   if (!data) throw new NotFoundError("Product", slug);
+  return toProduct(data);
+};
+
+export const fetchProductById = async (id: string): Promise<Product> => {
+  const { data, error } = await supabase.from("products").select("*").eq("id", id).maybeSingle();
+  if (error) handleSupabaseError(error);
+  if (!data) throw new NotFoundError("Product", id);
   return toProduct(data);
 };
 
@@ -236,12 +245,14 @@ export interface ProductSubscriber {
   currentBalanceKobo: number;
   status: SubscriptionStatus;
   investedAt: string | null;
+  fundingSource: FundingSource;
+  receiptUrl: string | null;
 }
 
 export const fetchProductSubscribers = async (productId: string): Promise<ProductSubscriber[]> => {
   const { data, error } = await supabase
     .from("product_subscriptions")
-    .select("id, principal_kobo, current_balance_kobo, status, invested_at, members(full_name, member_number)")
+    .select("id, principal_kobo, current_balance_kobo, status, invested_at, funding_source, receipt_url, members(full_name, member_number)")
     .eq("product_id", productId)
     .order("created_at", { ascending: false });
   if (error) handleSupabaseError(error);
@@ -253,6 +264,8 @@ export const fetchProductSubscribers = async (productId: string): Promise<Produc
     currentBalanceKobo: row.current_balance_kobo,
     status: row.status as SubscriptionStatus,
     investedAt: row.invested_at,
+    fundingSource: row.funding_source as FundingSource,
+    receiptUrl: row.receipt_url,
   }));
 };
 
@@ -325,6 +338,7 @@ export const createProduct = async (params: {
   minInvestmentKobo: number;
   tenorOptions?: number[];
   status: ProductStatus;
+  creditAccountInfo?: string;
 }): Promise<void> => {
   const { error } = await supabase.from("products").insert({
     tenant_id: params.tenantId,
@@ -337,6 +351,7 @@ export const createProduct = async (params: {
     min_investment_kobo: params.minInvestmentKobo,
     tenor_options: params.tenorOptions ?? null,
     status: params.status,
+    credit_account_info: params.creditAccountInfo ?? null,
   });
   if (error) handleSupabaseError(error);
 };
@@ -351,6 +366,7 @@ export const updateProduct = async (
     minInvestmentKobo: number;
     tenorOptions: number[];
     status: ProductStatus;
+    creditAccountInfo: string;
   }>
 ): Promise<void> => {
   const payload: Record<string, unknown> = {};
@@ -361,6 +377,7 @@ export const updateProduct = async (
   if (updates.minInvestmentKobo !== undefined) payload.min_investment_kobo = updates.minInvestmentKobo;
   if (updates.tenorOptions !== undefined) payload.tenor_options = updates.tenorOptions;
   if (updates.status !== undefined) payload.status = updates.status;
+  if (updates.creditAccountInfo !== undefined) payload.credit_account_info = updates.creditAccountInfo;
   payload.updated_at = new Date().toISOString();
 
   const { error } = await supabase.from("products").update(payload).eq("id", id);

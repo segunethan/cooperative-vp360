@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@jollify/shared/components/ui/card";
 import { Button } from "@jollify/shared/components/ui/button";
 import { Badge } from "@jollify/shared/components/ui/badge";
@@ -27,7 +28,6 @@ import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import ProductFormDialog, { ICON_MAP } from "@/components/cooperative/products/ProductFormDialog";
 import PublishRateDialog from "@/components/cooperative/products/PublishRateDialog";
-import ProductSubscribersDialog from "@/components/cooperative/products/ProductSubscribersDialog";
 
 const requestKindLabel: Record<string, string> = {
   SUBSCRIPTION: "New Subscription",
@@ -43,11 +43,11 @@ const requestKindColor: Record<string, string> = {
 
 const Products = () => {
   const { user, tenant } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [rateProduct, setRateProduct] = useState<Product | null>(null);
-  const [subscribersProduct, setSubscribersProduct] = useState<Product | null>(null);
 
   const { data: products = [], isLoading: loadingProducts } = useQuery({
     queryKey: ["products"],
@@ -151,7 +151,7 @@ const Products = () => {
                             Min. investment: <span className="font-medium text-foreground">{formatMoneyFull(p.minInvestmentKobo)}</span>
                           </p>
                           <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" className="flex-1" onClick={() => setSubscribersProduct(p)}>
+                            <Button variant="outline" size="sm" className="flex-1" onClick={() => navigate(`/cooperative/products/${p.id}/subscribers`)}>
                               <Users className="h-3.5 w-3.5 mr-2" />
                               Subscribers
                             </Button>
@@ -287,7 +287,6 @@ const Products = () => {
         onClose={() => { setFormOpen(false); setEditingProduct(null); }}
       />
       <PublishRateDialog product={rateProduct} onClose={() => setRateProduct(null)} />
-      <ProductSubscribersDialog product={subscribersProduct} onClose={() => setSubscribersProduct(null)} />
     </div>
   );
 };

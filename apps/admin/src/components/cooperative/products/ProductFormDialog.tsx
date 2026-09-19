@@ -43,6 +43,7 @@ const EMPTY_FORM = {
   minInvestmentNaira: "",
   tenorOptionsText: "",
   status: "DRAFT" as ProductStatus,
+  creditAccountInfo: "",
 };
 
 interface Props {
@@ -72,6 +73,7 @@ const ProductFormDialog = ({ open, tenantId, product, onClose }: Props) => {
         minInvestmentNaira: String(product.minInvestmentKobo / 100),
         tenorOptionsText: product.tenorOptions?.join(", ") ?? "",
         status: product.status,
+        creditAccountInfo: product.creditAccountInfo ?? "",
       });
     } else {
       setForm(EMPTY_FORM);
@@ -94,6 +96,7 @@ const ProductFormDialog = ({ open, tenantId, product, onClose }: Props) => {
         minInvestmentKobo: nairaToKobo(parseFloat(form.minInvestmentNaira) || 0),
         tenorOptions: form.productType === "FIXED_TENOR" && tenorOptions.length ? tenorOptions : undefined,
         status: form.status,
+        creditAccountInfo: form.creditAccountInfo || undefined,
       };
       if (product) return updateProduct(product.id, payload);
       return createProduct({ tenantId, slug: form.slug || slugify(form.name), productType: form.productType, ...payload });
@@ -201,6 +204,17 @@ const ProductFormDialog = ({ open, tenantId, product, onClose }: Props) => {
               <Input placeholder="e.g. 3, 6, 9, 12, 18, 24" value={form.tenorOptionsText} onChange={(e) => setForm({ ...form, tenorOptionsText: e.target.value })} />
             </div>
           )}
+
+          <div className="space-y-1.5">
+            <Label>Account to Credit</Label>
+            <Textarea
+              placeholder="Bank, account number, and account name members should pay into — e.g. GTBank, 0123456789, GopherWood Cooperative Ltd"
+              rows={2}
+              value={form.creditAccountInfo}
+              onChange={(e) => setForm({ ...form, creditAccountInfo: e.target.value })}
+            />
+            <p className="text-xs text-muted-foreground">Shown to members when they choose to fund a subscription by external payment.</p>
+          </div>
         </div>
 
         <DialogFooter>
