@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import AdminProtectedRoute from "@/components/AdminProtectedRoute";
 import Landing from "./pages/Landing";
+import Apply from "./pages/Apply";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
@@ -19,6 +20,7 @@ import Contributions from "./pages/cooperative/Contributions";
 import Loans from "./pages/cooperative/Loans";
 import Products from "./pages/cooperative/Products";
 import ProductSubscribers from "./pages/cooperative/ProductSubscribers";
+import Applications from "./pages/cooperative/Applications";
 import Kyc from "./pages/cooperative/Kyc";
 import Dividends from "./pages/cooperative/Dividends";
 import Announcements from "./pages/cooperative/Announcements";
@@ -37,6 +39,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/" element={<Landing />} />
+            <Route path="/apply/:slug" element={<Apply />} />
             <Route path="/login" element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
@@ -52,6 +55,7 @@ const App = () => (
               }
             >
               <Route index element={<Dashboard />} />
+              <Route path="applications" element={<Applications />} />
               <Route path="members" element={<Members />} />
               <Route path="members/:memberId" element={<MemberProfile />} />
               <Route path="contributions" element={<Contributions />} />

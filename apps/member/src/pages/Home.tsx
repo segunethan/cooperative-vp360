@@ -8,6 +8,7 @@ import { notifyRequestSubmitted } from "@jollify/shared/lib/api/products";
 import { fetchOwnKyc, type KycSubmission } from "@jollify/shared/lib/api/kyc";
 import { useAuth } from "@/context/AuthContext";
 import { useMemberProfile } from "@/hooks/useMemberProfile";
+import { useKycGate } from "@/hooks/useKycGate";
 import { useQuery } from "@tanstack/react-query";
 
 const statusColor: Record<string, string> = {
@@ -36,6 +37,7 @@ interface Contribution {
 const Home = () => {
   const { signOut } = useAuth();
   const { data: profile, isLoading: loadingProfile, error: profileError } = useMemberProfile();
+  const { requireKyc } = useKycGate();
 
   const [contributions, setContributions] = useState<Contribution[]>([]);
   const [loadingContribs, setLoadingContribs] = useState(true);
@@ -257,7 +259,7 @@ const Home = () => {
             <h2 className="font-semibold text-foreground text-sm">My Contributions</h2>
           </div>
           <button
-            onClick={() => setContribOpen(true)}
+            onClick={() => requireKyc() && setContribOpen(true)}
             className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 transition-colors px-3 py-1.5 rounded-lg bg-primary/8 hover:bg-primary/12"
           >
             <Plus className="h-3.5 w-3.5" /> Submit Payment

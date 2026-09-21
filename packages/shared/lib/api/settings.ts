@@ -14,6 +14,7 @@ export interface CooperativeProfile {
   status: string;
   billingPlan: string;
   trialEndsAt: string | null;
+  entranceFeeKobo: number | null;
 }
 
 export interface UpdateCooperativeProfileData {
@@ -54,7 +55,16 @@ export const fetchCooperativeProfile = async (tenantId: string): Promise<Coopera
     status: data!.status,
     billingPlan: data!.billing_plan,
     trialEndsAt: data!.trial_ends_at ?? null,
+    entranceFeeKobo: data!.entrance_fee_kobo ?? null,
   };
+};
+
+export const updateEntranceFee = async (tenantId: string, entranceFeeKobo: number | null): Promise<void> => {
+  const { error } = await supabase
+    .from("tenants")
+    .update({ entrance_fee_kobo: entranceFeeKobo, updated_at: new Date().toISOString() })
+    .eq("id", tenantId);
+  if (error) handleSupabaseError(error);
 };
 
 export const fetchTenantUsers = async (tenantId: string): Promise<TenantUserRow[]> => {
@@ -104,4 +114,10 @@ export const updateTenantUserRole = async (
     .update({ role })
     .eq("id", tenantUserId);
   if (error) handleSupabaseError(error);
+};
+
+export const fetchEntranceFee = async (tenantId: string): Promise<number | null> => {
+  const { data, error } = await supabase.from("tenants").select("entrance_fee_kobo").eq("id", tenantId).maybeSingle();
+  if (error) handleSupabaseError(error);
+  return data?.entrance_fee_kobo ?? null;
 };

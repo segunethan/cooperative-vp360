@@ -11,9 +11,10 @@ import { Textarea } from "@jollify/shared/components/ui/textarea";
 import { Label } from "@jollify/shared/components/ui/label";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { reviewKycSubmission, type PendingKycRow } from "@jollify/shared/lib/api/kyc";
+import { formatMoneyFull } from "@jollify/shared/lib/money";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
-import { ShieldCheck } from "lucide-react";
+import { ShieldCheck, FileText, ExternalLink } from "lucide-react";
 
 const idTypeLabel: Record<string, string> = {
   NIN: "National ID (NIN)",
@@ -82,10 +83,24 @@ const KycReviewDialog = ({ submission, onClose }: Props) => {
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Identity Document</p>
               <div className="grid grid-cols-2 gap-3">
+                <Field label="NIN" value={submission.nin} />
                 <Field label="ID Type" value={idTypeLabel[submission.idType] ?? submission.idType} />
                 <Field label="ID Number" value={submission.idNumber} />
                 <Field label="Expiry Date" value={new Date(submission.idExpiryDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} />
                 <Field label="Secret Question" value={submission.secretQuestion} />
+              </div>
+              {submission.idDocumentUrl && (
+                <a href={submission.idDocumentUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-primary text-xs font-medium hover:underline">
+                  <FileText className="h-3.5 w-3.5" /> View uploaded ID document <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Declarations</p>
+              <div className="grid grid-cols-1 gap-3">
+                <Field label="Not a member of another society with identical objectives" value={submission.notInOtherSociety ? "Confirmed" : "Not confirmed"} />
+                <Field label="Existing debt declaration" value={submission.existingDebtDeclaration || "None declared"} />
               </div>
             </div>
 
@@ -97,6 +112,21 @@ const KycReviewDialog = ({ submission, onClose }: Props) => {
                 <Field label="Phone" value={submission.nextOfKinPhone} />
                 <Field label="Address" value={submission.nextOfKinAddress} />
               </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Entrance Fee & Thrift</p>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Entrance Fee" value={submission.entranceFeeKobo ? formatMoneyFull(submission.entranceFeeKobo) : "Not required"} />
+                <Field label="Fee Paid Date" value={submission.entranceFeePaidDate ? new Date(submission.entranceFeePaidDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"} />
+                <Field label="Monthly Thrift Commitment" value={submission.monthlyThriftKobo ? formatMoneyFull(submission.monthlyThriftKobo) : "—"} />
+                <Field label="Signature" value={submission.signatureName} />
+              </div>
+              {submission.entranceFeeReceiptUrl && (
+                <a href={submission.entranceFeeReceiptUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-primary text-xs font-medium hover:underline">
+                  <FileText className="h-3.5 w-3.5" /> View entrance fee receipt <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
             </div>
 
             {showReject && (

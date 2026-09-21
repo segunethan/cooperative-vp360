@@ -1,7 +1,9 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
-import { Home, TrendingUp, CreditCard, User } from "lucide-react";
+import { Home, TrendingUp, CreditCard, User, ShieldAlert, ChevronRight } from "lucide-react";
 import { cn } from "@jollify/shared/lib/utils";
 import { useMemberProfile } from "@/hooks/useMemberProfile";
+import { useQuery } from "@tanstack/react-query";
+import { fetchOwnKyc } from "@jollify/shared/lib/api/kyc";
 
 const navItems = [
   { label: "Home", icon: Home, href: "/member" },
@@ -14,8 +16,22 @@ const MemberLayout = () => {
   const location = useLocation();
   const { data: profile } = useMemberProfile();
 
+  const { data: kyc } = useQuery({
+    queryKey: ["own-kyc", profile?.memberId],
+    queryFn: () => fetchOwnKyc(profile!.memberId),
+    enabled: !!profile,
+  });
+
   const isActive = (href: string) =>
     href === "/member" ? location.pathname === "/member" : location.pathname.startsWith(href);
+
+  const onKycScreen = location.pathname === "/member/kyc";
+  const showBanner = profile && !profile.kycVerified && !onKycScreen;
+  const bannerText = kyc?.status === "REJECTED"
+    ? "Your onboarding needs changes — tap to review"
+    : kyc?.status === "PENDING"
+    ? "Onboarding under review — most actions are locked until it's approved"
+    : "Complete your membership onboarding to unlock the app";
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">
@@ -35,6 +51,17 @@ const MemberLayout = () => {
           </div>
         </div>
       </header>
+
+      {showBanner && (
+        <Link
+          to="/member/kyc"
+          className="sticky top-14 z-10 flex items-center gap-2.5 bg-amber-50 border-b border-amber-200 px-4 py-2.5 hover:bg-amber-100/70 transition-colors"
+        >
+          <ShieldAlert className="h-4 w-4 text-amber-600 flex-shrink-0" />
+          <p className="text-xs font-medium text-amber-800 flex-1 max-w-3xl mx-auto">{bannerText}</p>
+          <ChevronRight className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+        </Link>
+      )}
 
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-6 pb-24">
         <Outlet />

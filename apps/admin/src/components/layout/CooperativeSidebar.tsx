@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@jollify/shared/lib/utils";
 import {
   LayoutDashboard,
+  UserPlus,
   Users,
   PiggyBank,
   CreditCard,
@@ -26,6 +27,7 @@ interface CooperativeSidebarProps {
 
 const navigationItems = [
   { title: "Dashboard", icon: LayoutDashboard, href: "/cooperative" },
+  { title: "Applications", icon: UserPlus, href: "/cooperative/applications" },
   { title: "Members", icon: Users, href: "/cooperative/members" },
   { title: "Contributions & Shares", icon: PiggyBank, href: "/cooperative/contributions" },
   { title: "Loans", icon: CreditCard, href: "/cooperative/loans" },

@@ -16,6 +16,7 @@ import {
   type FundingSource,
 } from "@jollify/shared/lib/api/products";
 import { useMemberProfile } from "@/hooks/useMemberProfile";
+import { useKycGate } from "@/hooks/useKycGate";
 
 const ICON_MAP: Record<string, typeof PiggyBank> = {
   "piggy-bank": PiggyBank,
@@ -49,6 +50,7 @@ const ProductDetail = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: profile } = useMemberProfile();
+  const { requireKyc } = useKycGate();
 
   const [mode, setMode] = useState<Mode>("none");
   const [amount, setAmount] = useState("");
@@ -342,7 +344,7 @@ const ProductDetail = () => {
             </div>
           </div>
         ) : (
-          <button onClick={() => setMode("subscribe")} className="w-full h-12 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors">
+          <button onClick={() => requireKyc() && setMode("subscribe")} className="w-full h-12 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors">
             Subscribe
           </button>
         )
@@ -419,10 +421,10 @@ const ProductDetail = () => {
 
           {mode === "none" && (
             <div className="flex gap-2">
-              <button onClick={() => setMode("topup")} className="flex-1 h-11 rounded-lg border border-border text-sm font-medium hover:bg-muted/50 transition-colors flex items-center justify-center gap-1.5">
+              <button onClick={() => requireKyc() && setMode("topup")} className="flex-1 h-11 rounded-lg border border-border text-sm font-medium hover:bg-muted/50 transition-colors flex items-center justify-center gap-1.5">
                 <ArrowUpCircle className="h-3.5 w-3.5" /> Top-up
               </button>
-              <button onClick={() => setMode("withdraw")} className="flex-1 h-11 rounded-lg border border-border text-sm font-medium hover:bg-muted/50 transition-colors flex items-center justify-center gap-1.5">
+              <button onClick={() => requireKyc() && setMode("withdraw")} className="flex-1 h-11 rounded-lg border border-border text-sm font-medium hover:bg-muted/50 transition-colors flex items-center justify-center gap-1.5">
                 <ArrowDownCircle className="h-3.5 w-3.5" /> Withdraw
               </button>
             </div>

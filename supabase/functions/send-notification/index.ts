@@ -7,15 +7,30 @@ const CORS = {
 };
 
 interface NotificationPayload {
-  type: "request_submitted" | "request_reviewed";
-  tenantId?: string;      // required for request_submitted — used to find admin emails
+  type: "request_submitted" | "request_reviewed" | "application_submitted";
+  tenantId?: string;      // required for request_submitted/application_submitted — used to find admin emails
   memberEmail?: string;   // required for request_reviewed — the member is the recipient
   memberName: string;
   cooperativeName: string;
-  requestLabel: string;   // e.g. "GopherEdge subscription", "Loan top-up", "GopherHold withdrawal"
-  amountLabel: string;    // formatted, e.g. "₦500,000"
+  requestLabel?: string;  // e.g. "GopherEdge subscription", "Loan top-up", "GopherHold withdrawal"
+  amountLabel?: string;   // formatted, e.g. "₦500,000"
   status?: "APPROVED" | "REJECTED"; // only for request_reviewed
+  applicantEmail?: string;  // application_submitted only
+  applicantPhone?: string;  // application_submitted only
+  applicantAbout?: string;  // application_submitted only
 }
+
+const findAdminEmails = async (supabaseAdmin: ReturnType<typeof createClient>, tenantId: string): Promise<string[]> => {
+  const { data: tenantUsers, error } = await supabaseAdmin.from("tenant_users").select("user_id").eq("tenant_id", tenantId);
+  if (error) throw new Error(error.message);
+  const emails = await Promise.all(
+    (tenantUsers ?? []).map(async (row: { user_id: string }) => {
+      const { data } = await supabaseAdmin.auth.admin.getUserById(row.user_id);
+      return data.user?.email ?? null;
+    })
+  );
+  return emails.filter((e): e is string => !!e);
+};
 
 const emailShell = (heading: string, body: string) => `<!DOCTYPE html>
 <html lang="en">
@@ -77,20 +92,7 @@ serve(async (req) => {
 
     if (type === "request_submitted") {
       if (!payload.tenantId) throw new Error("tenantId is required for request_submitted");
-
-      const { data: tenantUsers, error: tenantUsersError } = await supabaseAdmin
-        .from("tenant_users")
-        .select("user_id")
-        .eq("tenant_id", payload.tenantId);
-      if (tenantUsersError) throw new Error(tenantUsersError.message);
-
-      const emails = await Promise.all(
-        (tenantUsers ?? []).map(async (row) => {
-          const { data } = await supabaseAdmin.auth.admin.getUserById(row.user_id);
-          return data.user?.email ?? null;
-        })
-      );
-      recipients = emails.filter((e): e is string => !!e);
+      recipients = await findAdminEmails(supabaseAdmin, payload.tenantId);
       if (recipients.length === 0) return new Response(JSON.stringify({ ok: true, skipped: "no admin emails" }), { headers: { ...CORS, "Content-Type": "application/json" } });
 
       subject = `New request awaiting approval — ${requestLabel}`;
@@ -99,6 +101,24 @@ serve(async (req) => {
         `<p style="margin:0 0 12px;font-size:15px;color:#374151;">
           <strong>${memberName}</strong> submitted a request for <strong>${requestLabel}</strong> (${amountLabel}) at ${cooperativeName}.
         </p>
+        <p style="margin:0;font-size:14px;color:#6b7280;">Sign in to your admin console to review and approve.</p>`
+      );
+    } else if (type === "application_submitted") {
+      if (!payload.tenantId) throw new Error("tenantId is required for application_submitted");
+      recipients = await findAdminEmails(supabaseAdmin, payload.tenantId);
+      if (recipients.length === 0) return new Response(JSON.stringify({ ok: true, skipped: "no admin emails" }), { headers: { ...CORS, "Content-Type": "application/json" } });
+
+      subject = `New membership application — ${memberName}`;
+      html = emailShell(
+        "New membership application",
+        `<p style="margin:0 0 12px;font-size:15px;color:#374151;">
+          <strong>${memberName}</strong> applied to join ${cooperativeName}.
+        </p>
+        <table cellpadding="0" cellspacing="0" style="margin:0 0 16px;font-size:14px;color:#374151;">
+          <tr><td style="padding:2px 8px 2px 0;color:#6b7280;">Email</td><td>${payload.applicantEmail ?? "—"}</td></tr>
+          <tr><td style="padding:2px 8px 2px 0;color:#6b7280;">Phone</td><td>${payload.applicantPhone ?? "—"}</td></tr>
+          ${payload.applicantAbout ? `<tr><td style="padding:2px 8px 2px 0;color:#6b7280;vertical-align:top;">About</td><td>${payload.applicantAbout}</td></tr>` : ""}
+        </table>
         <p style="margin:0;font-size:14px;color:#6b7280;">Sign in to your admin console to review and approve.</p>`
       );
     } else {

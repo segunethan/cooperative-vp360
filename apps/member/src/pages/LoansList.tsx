@@ -6,6 +6,7 @@ import { formatMoneyFull } from "@jollify/shared/lib/money";
 import { submitLoanApplication } from "@jollify/shared/lib/api/loans";
 import { notifyRequestSubmitted } from "@jollify/shared/lib/api/products";
 import { useMemberProfile } from "@/hooks/useMemberProfile";
+import { useKycGate } from "@/hooks/useKycGate";
 
 const LOAN_PRODUCTS = [
   { label: "Personal Loan — 12% p.a., up to 24 months", rate: 12, maxMonths: 24 },
@@ -34,6 +35,7 @@ const statusStyle: Record<string, string> = {
 
 const LoansList = () => {
   const { data: profile } = useMemberProfile();
+  const { requireKyc } = useKycGate();
   const [loans, setLoans] = useState<LoanRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -112,7 +114,7 @@ const LoansList = () => {
           <p className="text-sm text-muted-foreground">Applications, active loans, and repayment history.</p>
         </div>
         <button
-          onClick={() => setLoanOpen(true)}
+          onClick={() => requireKyc() && setLoanOpen(true)}
           className="flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 transition-colors px-3 py-1.5 rounded-lg bg-primary/8 hover:bg-primary/12 flex-shrink-0"
         >
           <Plus className="h-3.5 w-3.5" /> Apply

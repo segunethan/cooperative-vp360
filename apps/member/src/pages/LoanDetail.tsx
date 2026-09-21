@@ -7,6 +7,7 @@ import { formatMoneyFull, nairaToKobo } from "@jollify/shared/lib/money";
 import { fetchLoanLedger, requestLoanTopup, type LoanLedgerRow } from "@jollify/shared/lib/api/loans";
 import { notifyRequestSubmitted } from "@jollify/shared/lib/api/products";
 import { useMemberProfile } from "@/hooks/useMemberProfile";
+import { useKycGate } from "@/hooks/useKycGate";
 
 const typeLabel: Record<string, string> = { DISBURSEMENT: "Disbursed", REPAYMENT: "Repayment", TOPUP: "Top-up" };
 
@@ -20,6 +21,7 @@ const LoanDetail = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: profile } = useMemberProfile();
+  const { requireKyc } = useKycGate();
 
   const [topupOpen, setTopupOpen] = useState(false);
   const [amount, setAmount] = useState("");
@@ -128,7 +130,7 @@ const LoanDetail = () => {
             </div>
           </div>
         ) : (
-          <button onClick={() => setTopupOpen(true)} className="w-full h-11 rounded-lg border border-border text-sm font-medium hover:bg-muted/50 transition-colors flex items-center justify-center gap-1.5">
+          <button onClick={() => requireKyc() && setTopupOpen(true)} className="w-full h-11 rounded-lg border border-border text-sm font-medium hover:bg-muted/50 transition-colors flex items-center justify-center gap-1.5">
             <ArrowUpCircle className="h-3.5 w-3.5" /> Request Top-up
           </button>
         )
