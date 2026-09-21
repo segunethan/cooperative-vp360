@@ -475,7 +475,7 @@ const Settings = () => {
                   onClick={async () => {
                     const { supabase: sb } = await import("@jollify/shared/lib/supabase");
                     await sb.auth.resetPasswordForEmail(user?.email ?? "", {
-                      redirectTo: `${window.location.origin}/cooperative`,
+                      redirectTo: `${window.location.origin}/reset-password`,
                     });
                     toast.success("Password reset email sent.");
                   }}

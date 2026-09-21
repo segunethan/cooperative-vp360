@@ -8,6 +8,8 @@ import { AuthProvider } from "@/context/AuthContext";
 import AdminProtectedRoute from "@/components/AdminProtectedRoute";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Signup from "./pages/Signup";
 import { CooperativeLayout } from "./components/layout/CooperativeLayout";
 import Dashboard from "./pages/cooperative/Dashboard";
@@ -36,6 +38,8 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/super-admin" element={<SuperAdmin />} />
 

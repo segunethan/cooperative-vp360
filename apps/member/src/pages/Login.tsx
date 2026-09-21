@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@jollify/shared/components/ui/button";
 import { Input } from "@jollify/shared/components/ui/input";
 import { Label } from "@jollify/shared/components/ui/label";
@@ -75,7 +75,12 @@ const Login = () => {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="password" className="text-sm font-medium">Password</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password" className="text-sm font-medium">Password</Label>
+              <Link to="/forgot-password" className="text-xs text-primary hover:text-primary/80 font-medium transition-colors">
+                Forgot password?
+              </Link>
+            </div>
             <div className="relative">
               <Input
                 id="password"

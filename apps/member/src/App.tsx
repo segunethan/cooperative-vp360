@@ -8,6 +8,8 @@ import { AuthProvider } from "@/context/AuthContext";
 import MemberProtectedRoute from "@/components/MemberProtectedRoute";
 import MemberLayout from "@/components/layout/MemberLayout";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import AcceptInvite from "./pages/AcceptInvite";
 import Home from "./pages/Home";
 import ProductsList from "./pages/ProductsList";
@@ -29,6 +31,8 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />
             <Route
               path="/member"
