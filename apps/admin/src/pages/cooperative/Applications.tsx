@@ -18,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@jollify/shared/components/ui/table";
-import { UserPlus, Inbox, Copy } from "lucide-react";
+import { UserPlus, Inbox } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchPendingApplications,
@@ -29,6 +29,7 @@ import {
 import { sendMemberInviteEmail } from "@jollify/shared/lib/api/members";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
+import MembershipLinkCard from "@/components/cooperative/members/MembershipLinkCard";
 
 const Applications = () => {
   const { user, tenant } = useAuth();
@@ -40,12 +41,6 @@ const Applications = () => {
     queryKey: ["pending-applications"],
     queryFn: fetchPendingApplications,
   });
-
-  const applyLink = tenant ? `${window.location.origin}/apply/${tenant.slug}` : "";
-  const copyLink = () => {
-    navigator.clipboard.writeText(applyLink);
-    toast.success("Link copied.");
-  };
 
   const approveMutation = useMutation({
     mutationFn: async (application: MemberApplication) => {
@@ -81,14 +76,7 @@ const Applications = () => {
         <p className="text-muted-foreground">Prospective members who applied through your public application link.</p>
       </div>
 
-      <Card>
-        <CardContent className="p-4 flex items-center gap-2">
-          <input readOnly value={applyLink} className="flex-1 h-9 px-3 rounded-md border border-input bg-muted/30 text-xs font-mono" />
-          <Button type="button" variant="outline" size="icon" onClick={copyLink}>
-            <Copy className="h-4 w-4" />
-          </Button>
-        </CardContent>
-      </Card>
+      <MembershipLinkCard />
 
       <Card>
         <CardHeader>

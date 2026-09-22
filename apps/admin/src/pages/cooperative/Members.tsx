@@ -8,6 +8,7 @@ import MemberStatsCards from "@/components/cooperative/members/MemberStatsCards"
 import MemberDirectory from "@/components/cooperative/members/MemberDirectory";
 import AddMemberDialog from "@/components/cooperative/members/AddMemberDialog";
 import BulkImportDialog from "@/components/cooperative/members/BulkImportDialog";
+import MembershipLinkCard from "@/components/cooperative/members/MembershipLinkCard";
 import {
   fetchAllMembers,
   approveMemberApplication,
@@ -115,6 +116,8 @@ const Members = () => {
           </Button>
         </div>
       </div>
+
+      <MembershipLinkCard />
 
       <MemberStatsCards stats={stats} />
 

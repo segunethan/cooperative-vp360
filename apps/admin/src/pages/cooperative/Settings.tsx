@@ -29,7 +29,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Crown,
-  Copy,
   UserPlus,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -43,6 +42,7 @@ import {
 import { nairaToKobo, formatMoneyFull } from "@jollify/shared/lib/money";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
+import MembershipLinkCard from "@/components/cooperative/members/MembershipLinkCard";
 
 const PLAN_COLORS: Record<string, string> = {
   trial:      "bg-warning/10 text-warning border-warning/20",
@@ -120,12 +120,6 @@ const Settings = () => {
     },
     onError: (e: Error) => toast.error(e.message),
   });
-
-  const applyLink = profile ? `${window.location.origin}/apply/${profile.slug}` : "";
-  const copyApplyLink = () => {
-    navigator.clipboard.writeText(applyLink);
-    toast.success("Link copied.");
-  };
 
   // ── Team Members ─────────────────────────────────────────────────────────────
   const { data: teamMembers = [], isLoading: loadingTeam } = useQuery({
@@ -294,21 +288,10 @@ const Settings = () => {
                       {entranceFeeMutation.isPending ? "Saving…" : "Save Fee"}
                     </Button>
                   </div>
-
-                  <div className="pt-2 border-t border-border space-y-1.5">
-                    <Label>Public Application Link</Label>
-                    <div className="flex items-center gap-2">
-                      <Input value={applyLink} readOnly className="font-mono text-xs" />
-                      <Button type="button" variant="outline" size="icon" onClick={copyApplyLink}>
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Share this on your cooperative's website — prospective members apply here and appear in your Applications queue.
-                    </p>
-                  </div>
                 </CardContent>
               </Card>
+
+              <MembershipLinkCard />
             </div>
 
             {/* Sidebar — plan + status */}
