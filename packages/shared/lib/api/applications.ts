@@ -23,6 +23,7 @@ export interface MemberApplication {
   status: ApplicationStatus;
   rejectionReason: string | null;
   submittedAt: string;
+  reviewedAt: string | null;
 }
 
 // ── Public (unauthenticated) ─────────────────────────────────────────────────
@@ -87,6 +88,7 @@ const toApplication = (row: Record<string, unknown>): MemberApplication => ({
   status: row.status as ApplicationStatus,
   rejectionReason: (row.rejection_reason as string) ?? null,
   submittedAt: row.submitted_at as string,
+  reviewedAt: (row.reviewed_at as string) ?? null,
 });
 
 export const fetchPendingApplications = async (): Promise<MemberApplication[]> => {
@@ -95,6 +97,16 @@ export const fetchPendingApplications = async (): Promise<MemberApplication[]> =
     .select("*")
     .eq("status", "PENDING")
     .order("submitted_at", { ascending: true });
+  if (error) handleSupabaseError(error);
+  return (data ?? []).map(toApplication);
+};
+
+export const fetchRejectedApplications = async (): Promise<MemberApplication[]> => {
+  const { data, error } = await supabase
+    .from("member_applications")
+    .select("*")
+    .eq("status", "REJECTED")
+    .order("reviewed_at", { ascending: false });
   if (error) handleSupabaseError(error);
   return (data ?? []).map(toApplication);
 };

@@ -80,21 +80,17 @@ const toDisplayStatus = (dbStatus: string): string => {
 };
 
 // ── DB row → UI Member shape ──────────────────────────────────────────────────
-const toUiMember = (row: Record<string, unknown>): Member => ({
+const toUiMember = (row: Record<string, unknown>, balances?: {
+  contributionKobo: number; shareKobo: number; loanKobo: number;
+}): Member => ({
   id: row.member_number as string,
   name: row.full_name as string,
   email: (row.email as string) ?? "",
   phone: (row.phone as string) ?? "",
   status: toDisplayStatus(row.status as string),
-  contributionBalance: row.contribution_balance_kobo
-    ? formatMoneyFull(row.contribution_balance_kobo as number)
-    : "₦0",
-  shareBalance: row.share_balance_kobo
-    ? formatMoneyFull(row.share_balance_kobo as number)
-    : "₦0",
-  loanBalance: row.loan_balance_kobo
-    ? formatMoneyFull(row.loan_balance_kobo as number)
-    : "₦0",
+  contributionBalance: formatMoneyFull(balances?.contributionKobo ?? 0),
+  shareBalance: formatMoneyFull(balances?.shareKobo ?? 0),
+  loanBalance: formatMoneyFull(balances?.loanKobo ?? 0),
   joinDate: new Date(row.joined_at as string).toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
@@ -103,30 +99,43 @@ const toUiMember = (row: Record<string, unknown>): Member => ({
   kycVerified: row.kyc_verified as boolean,
 });
 
+// Sums a member-scoped kobo column into a per-member-id lookup map.
+const sumByMember = (rows: { member_id: string; amount: number }[] | null): Map<string, number> => {
+  const map = new Map<string, number>();
+  for (const row of rows ?? []) {
+    map.set(row.member_id, (map.get(row.member_id) ?? 0) + (row.amount ?? 0));
+  }
+  return map;
+};
+
 // ── Reads ────────────────────────────────────────────────────────────────────
 
 export const fetchAllMembers = async (): Promise<Member[]> => {
-  const { data, error } = await supabase
-    .from("members")
-    .select(`
-      *,
-      contribution_balance_kobo:contributions(amount_kobo).sum(),
-      share_balance_kobo:shares(total_value_kobo).sum(),
-      loan_balance_kobo:loans(principal_kobo).sum()
-    `)
-    .order("created_at", { ascending: false });
+  const [membersRes, contributionsRes, sharesRes, loansRes] = await Promise.all([
+    supabase.from("members").select("*").order("created_at", { ascending: false }),
+    supabase.from("contributions").select("member_id, amount_kobo").eq("status", "COMPLETED"),
+    supabase.from("shares").select("member_id, total_value_kobo"),
+    supabase.from("loans").select("member_id, principal_kobo").eq("status", "ACTIVE"),
+  ]);
+  if (membersRes.error) handleSupabaseError(membersRes.error);
 
-  if (error) {
-    // Fallback: plain select without aggregation if PostgREST version doesn't support it
-    const { data: plain, error: plainError } = await supabase
-      .from("members")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (plainError) handleSupabaseError(plainError);
-    return (plain ?? []).map(toUiMember);
-  }
+  const contributionMap = sumByMember(
+    (contributionsRes.data ?? []).map((r) => ({ member_id: r.member_id, amount: r.amount_kobo }))
+  );
+  const shareMap = sumByMember(
+    (sharesRes.data ?? []).map((r) => ({ member_id: r.member_id, amount: r.total_value_kobo }))
+  );
+  const loanMap = sumByMember(
+    (loansRes.data ?? []).map((r) => ({ member_id: r.member_id, amount: r.principal_kobo }))
+  );
 
-  return (data ?? []).map(toUiMember);
+  return (membersRes.data ?? []).map((row) =>
+    toUiMember(row, {
+      contributionKobo: contributionMap.get(row.id) ?? 0,
+      shareKobo: shareMap.get(row.id) ?? 0,
+      loanKobo: loanMap.get(row.id) ?? 0,
+    })
+  );
 };
 
 export const fetchActiveMembers = async (): Promise<{ memberNumber: string; name: string }[]> => {
