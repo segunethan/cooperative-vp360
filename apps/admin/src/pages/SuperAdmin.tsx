@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Eye, EyeOff, LogOut, Search, ShieldAlert,
   LayoutDashboard, Building2, Users, RefreshCw,
-  ChevronDown, ChevronUp, Ban, CheckCircle2, AlertCircle,
+  ChevronDown, ChevronUp, Ban, CheckCircle2, AlertCircle, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@jollify/shared/components/ui/button";
 import { Input } from "@jollify/shared/components/ui/input";
@@ -11,7 +11,7 @@ import { supabase } from "@jollify/shared/lib/supabase";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type AuthState = "checking" | "login" | "denied" | "dashboard";
-type View = "overview" | "cooperatives" | "members";
+type View = "overview" | "cooperatives" | "kyb" | "members";
 
 interface Cooperative {
   id: string;
@@ -369,9 +369,12 @@ const SuperAdmin = () => {
   }
 
   // ── Dashboard ─────────────────────────────────────────────────────────────────
+  const pendingKybCoops = coops.filter((c) => c.status === "KYB_SUBMITTED");
+
   const navItems: { id: View; label: string; icon: React.ReactNode }[] = [
     { id: "overview",      label: "Overview",      icon: <LayoutDashboard className="h-4 w-4" /> },
     { id: "cooperatives",  label: "Cooperatives",  icon: <Building2 className="h-4 w-4" /> },
+    { id: "kyb",           label: "KYB Review",    icon: <ShieldCheck className="h-4 w-4" /> },
     { id: "members",       label: "All Members",   icon: <Users className="h-4 w-4" /> },
   ];
 
@@ -413,6 +416,11 @@ const SuperAdmin = () => {
                   {coops.length}
                 </span>
               )}
+              {id === "kyb" && pendingKybCoops.length > 0 && (
+                <span className="ml-auto text-[10px] bg-amber-400 text-amber-950 font-bold px-1.5 py-0.5 rounded-full">
+                  {pendingKybCoops.length}
+                </span>
+              )}
               {id === "members" && members.length > 0 && (
                 <span className="ml-auto text-[10px] bg-white/10 text-white/60 px-1.5 py-0.5 rounded-full">
                   {members.length}
@@ -440,11 +448,12 @@ const SuperAdmin = () => {
         <header className="bg-white border-b border-stone-200 px-7 py-4 flex items-center justify-between">
           <div>
             <h1 className="font-bold text-foreground capitalize">
-              {view === "overview" ? "Dashboard Overview" : view === "cooperatives" ? "Cooperatives" : "All Members"}
+              {view === "overview" ? "Dashboard Overview" : view === "cooperatives" ? "Cooperatives" : view === "kyb" ? "KYB Review" : "All Members"}
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
               {view === "overview" && "Platform-wide activity summary"}
               {view === "cooperatives" && `${coops.length} cooperative${coops.length !== 1 ? "s" : ""} registered`}
+              {view === "kyb" && `${pendingKybCoops.length} business verification${pendingKybCoops.length !== 1 ? "s" : ""} awaiting review`}
               {view === "members" && `${members.length} member${members.length !== 1 ? "s" : ""} across all cooperatives`}
             </p>
           </div>
@@ -469,13 +478,26 @@ const SuperAdmin = () => {
           {/* ══ OVERVIEW ══════════════════════════════════════════════════════ */}
           {view === "overview" && (
             <>
+              {pendingKybCoops.length > 0 && (
+                <button
+                  onClick={() => setView("kyb")}
+                  className="w-full flex items-center gap-3 px-5 py-3.5 bg-amber-50 border border-amber-200 rounded-xl text-left hover:bg-amber-100/70 transition-colors"
+                >
+                  <ShieldCheck className="h-4 w-4 text-amber-700 flex-shrink-0" />
+                  <p className="text-sm text-amber-900 flex-1">
+                    <strong>{pendingKybCoops.length}</strong> cooperative{pendingKybCoops.length !== 1 ? "s" : ""} waiting on business verification review.
+                  </p>
+                  <span className="text-xs font-semibold text-amber-800 underline">Review now</span>
+                </button>
+              )}
+
               {/* Stat cards */}
               <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
                 {[
-                  { label: "Total Cooperatives", value: stats.total,     sub: "registered",         color: "text-foreground" },
-                  { label: "Active",             value: stats.active,    sub: "cooperatives",        color: "text-emerald-600" },
-                  { label: "Suspended",          value: stats.suspended, sub: "cooperatives",        color: "text-red-600" },
-                  { label: "Total Members",      value: stats.members,   sub: "across all coops",    color: "text-foreground" },
+                  { label: "Total Cooperatives", value: stats.total,             sub: "registered",         color: "text-foreground" },
+                  { label: "Active",             value: stats.active,            sub: "cooperatives",        color: "text-emerald-600" },
+                  { label: "Pending KYB",         value: pendingKybCoops.length,  sub: "awaiting review",     color: "text-amber-600" },
+                  { label: "Total Members",      value: stats.members,           sub: "across all coops",    color: "text-foreground" },
                 ].map(({ label, value, sub, color }) => (
                   <div key={label} className="bg-white border border-stone-200 rounded-xl p-5">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
@@ -727,6 +749,86 @@ const SuperAdmin = () => {
                       })}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ══ KYB REVIEW ════════════════════════════════════════════════════ */}
+          {view === "kyb" && (
+            <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-stone-100">
+                <h2 className="font-semibold text-sm">Pending Business Verifications</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">New cooperatives can't invite members until you approve their KYB here.</p>
+              </div>
+
+              {coopsLoading ? (
+                <div className="flex items-center justify-center py-16"><Spinner /></div>
+              ) : pendingKybCoops.length === 0 ? (
+                <div className="text-center py-16 text-muted-foreground text-sm">
+                  <ShieldCheck className="h-8 w-8 mx-auto mb-3 opacity-30" />
+                  Nothing awaiting review.
+                </div>
+              ) : (
+                <div className="divide-y divide-stone-100">
+                  {pendingKybCoops.map((c) => (
+                    <div key={c.id} className="px-5 py-5">
+                      <div className="flex items-start justify-between gap-4 mb-3">
+                        <div>
+                          <p className="font-semibold text-foreground">{c.name}</p>
+                          <p className="text-xs text-muted-foreground">/{c.slug} · submitted {c.kyb_submitted_at ? fmt(c.kyb_submitted_at as string) : "—"}</p>
+                        </div>
+                        <Badge status={c.status} />
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mb-3">
+                        <div><p className="text-xs text-muted-foreground">RC Number</p><p className="font-medium">{(c.rc_number as string) || "—"}</p></div>
+                        <div><p className="text-xs text-muted-foreground">Phone</p><p className="font-medium">{(c.phone as string) || "—"}</p></div>
+                        <div><p className="text-xs text-muted-foreground">Entrance Fee</p><p className="font-medium">{c.entrance_fee_kobo ? `₦${((c.entrance_fee_kobo as number) / 100).toLocaleString()}` : "—"}</p></div>
+                        <div><p className="text-xs text-muted-foreground">Authorized Signatory</p><p className="font-medium">{(c.authorized_signatory_name as string) || "—"}</p></div>
+                        <div className="col-span-2"><p className="text-xs text-muted-foreground">Address</p><p className="font-medium">{(c.address as string) || "—"}</p></div>
+                        <div className="col-span-2"><p className="text-xs text-muted-foreground">Settlement Bank</p><p className="font-medium whitespace-pre-line">{(c.bank_account_info as string) || "—"}</p></div>
+                      </div>
+
+                      {c.cac_certificate_url ? (
+                        <a href={c.cac_certificate_url as string} target="_blank" rel="noreferrer" className="inline-block text-xs font-medium text-primary hover:underline mb-3">
+                          View CAC certificate ↗
+                        </a>
+                      ) : (
+                        <p className="text-xs text-muted-foreground mb-3">No CAC certificate on file.</p>
+                      )}
+
+                      {kybRejecting === c.id ? (
+                        <div className="space-y-2 max-w-md">
+                          <textarea
+                            placeholder="Reason for rejection…"
+                            rows={2}
+                            value={kybRejectionReason}
+                            onChange={(e) => setKybRejectionReason(e.target.value)}
+                            className="w-full text-xs p-2 rounded-md border border-stone-300"
+                          />
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setKybRejecting(null); setKybRejectionReason(""); }}>Cancel</Button>
+                            <Button size="sm" variant="destructive" className="h-7 text-xs" disabled={!kybRejectionReason || actionLoading === c.id}
+                              onClick={() => reviewKyb(c.id, false, kybRejectionReason)}>
+                              {actionLoading === c.id ? "Rejecting…" : "Confirm Rejection"}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : actionLoading === c.id ? <Spinner sm /> : (
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" className="h-7 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                            onClick={() => reviewKyb(c.id, true)}>
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-7 text-xs border-red-200 text-red-600 hover:bg-red-50"
+                            onClick={() => setKybRejecting(c.id)}>
+                            <Ban className="h-3.5 w-3.5 mr-1" /> Reject
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
