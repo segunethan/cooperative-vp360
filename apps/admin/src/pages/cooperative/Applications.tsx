@@ -32,11 +32,13 @@ import { sendMemberInviteEmail } from "@jollify/shared/lib/api/members";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import MembershipLinkCard from "@/components/cooperative/members/MembershipLinkCard";
+import { useKybGate } from "@/hooks/useKybGate";
 
 const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 const Applications = () => {
   const { user, tenant } = useAuth();
+  const { requireKyb } = useKybGate();
   const queryClient = useQueryClient();
   const [rejecting, setRejecting] = useState<MemberApplication | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
@@ -137,7 +139,7 @@ const Applications = () => {
                               <Button
                                 variant="ghost" size="sm" className="text-success hover:text-success"
                                 disabled={approveMutation.isPending}
-                                onClick={() => approveMutation.mutate(a)}
+                                onClick={() => requireKyb() && approveMutation.mutate(a)}
                               >
                                 Approve
                               </Button>

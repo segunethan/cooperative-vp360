@@ -22,6 +22,7 @@ import Products from "./pages/cooperative/Products";
 import ProductSubscribers from "./pages/cooperative/ProductSubscribers";
 import Applications from "./pages/cooperative/Applications";
 import Kyc from "./pages/cooperative/Kyc";
+import Kyb from "./pages/cooperative/Kyb";
 import Dividends from "./pages/cooperative/Dividends";
 import Announcements from "./pages/cooperative/Announcements";
 import Reports from "./pages/cooperative/Reports";
@@ -63,6 +64,7 @@ const App = () => (
               <Route path="products" element={<Products />} />
               <Route path="products/:productId/subscribers" element={<ProductSubscribers />} />
               <Route path="kyc" element={<Kyc />} />
+              <Route path="kyb" element={<Kyb />} />
               <Route path="dividends" element={<Dividends />} />
               <Route path="announcements" element={<Announcements />} />
               <Route path="reports" element={<Reports />} />

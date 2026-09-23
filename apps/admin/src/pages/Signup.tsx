@@ -136,7 +136,7 @@ const Signup = () => {
       if (tenantError) throw new Error(tenantError.message);
 
       await reloadTenant();
-      navigate("/cooperative", { replace: true });
+      navigate("/cooperative/kyb", { replace: true });
     } catch (err) {
       setOtpError(err instanceof Error ? err.message : "Verification failed");
     } finally {

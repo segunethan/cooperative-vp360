@@ -17,12 +17,14 @@ import {
   sendMemberInviteEmail,
 } from "@jollify/shared/lib/api/members";
 import { useState } from "react";
+import { useKybGate } from "@/hooks/useKybGate";
 
 const Members = () => {
   const { toast } = useToast();
   const { tenant } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { requireKyb } = useKybGate();
 
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -118,11 +120,11 @@ const Members = () => {
           <p className="text-muted-foreground">Manage your cooperative members</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)}>
+          <Button variant="outline" size="sm" onClick={() => requireKyb() && setBulkOpen(true)}>
             <Upload className="h-4 w-4 mr-2" />
             Bulk Import
           </Button>
-          <Button size="sm" onClick={() => setAddOpen(true)}>
+          <Button size="sm" onClick={() => requireKyb() && setAddOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Member
           </Button>

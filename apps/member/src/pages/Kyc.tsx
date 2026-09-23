@@ -7,7 +7,7 @@ import { fetchMembershipSettings } from "@jollify/shared/lib/api/settings";
 import { formatMoneyFull, nairaToKobo, generatePaymentReference } from "@jollify/shared/lib/money";
 import { supabase } from "@jollify/shared/lib/supabase";
 import { useQuery } from "@tanstack/react-query";
-import Stepper from "@/components/Stepper";
+import Stepper from "@jollify/shared/components/Stepper";
 
 const STEPS = ["Identity & Bank Details", "Declarations & Next of Kin", "Entrance Fee & Thrift", "Review & Sign"];
 

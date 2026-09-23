@@ -47,6 +47,7 @@ const STATUS_COLORS: Record<string, string> = {
   ACTIVE:                      "bg-emerald-50 text-emerald-700 border-emerald-200",
   EMAIL_VERIFIED:              "bg-blue-50 text-blue-700 border-blue-200",
   KYB_SUBMITTED:               "bg-purple-50 text-purple-700 border-purple-200",
+  KYB_REJECTED:                "bg-red-50 text-red-700 border-red-200",
   SUSPENDED:                   "bg-red-50 text-red-700 border-red-200",
   PENDING_EMAIL_VERIFICATION:  "bg-amber-50 text-amber-700 border-amber-200",
   // lowercase fallbacks in case any old data slips through
@@ -58,6 +59,7 @@ const DISPLAY_LABELS: Record<string, string> = {
   ACTIVE:                     "Active",
   EMAIL_VERIFIED:             "Email Verified",
   KYB_SUBMITTED:              "KYB Submitted",
+  KYB_REJECTED:               "KYB Rejected",
   SUSPENDED:                  "Suspended",
   PENDING_EMAIL_VERIFICATION: "Pending Verification",
 };
@@ -104,6 +106,8 @@ const SuperAdmin = () => {
   const [expandedMembers, setExpandedMembers] = useState<Record<string, Member[]>>({});
   const [expandLoading, setExpandLoading] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [kybRejecting, setKybRejecting] = useState<string | null>(null);
+  const [kybRejectionReason, setKybRejectionReason] = useState("");
 
   const sessionRef = useRef<string | null>(null);
 
@@ -207,6 +211,17 @@ const SuperAdmin = () => {
     try {
       await call({ action: "set_status", tenantId: id, status });
       setCoops((prev) => prev.map((c) => c.id === id ? { ...c, status } : c));
+    } catch { /* ignore */ }
+    setActionLoading(null);
+  };
+
+  const reviewKyb = async (id: string, approve: boolean, rejectionReason?: string) => {
+    setActionLoading(id);
+    try {
+      const updated = await call({ action: "review_kyb", tenantId: id, approve, rejectionReason });
+      setCoops((prev) => prev.map((c) => c.id === id ? { ...c, ...updated } : c));
+      setKybRejecting(null);
+      setKybRejectionReason("");
     } catch { /* ignore */ }
     setActionLoading(null);
   };
@@ -601,6 +616,61 @@ const SuperAdmin = () => {
                             {expandedCoop === c.id && (
                               <tr key={`${c.id}-expand`}>
                                 <td colSpan={10} className="bg-stone-50/80 border-t border-stone-200 px-6 py-4">
+                                  {(c.kyb_submitted_at || c.status === "KYB_SUBMITTED") && (
+                                    <div className="mb-5 pb-5 border-b border-stone-200">
+                                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                                        Business Verification (KYB) — {c.name}
+                                      </p>
+                                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm mb-3">
+                                        <div><p className="text-xs text-muted-foreground">RC Number</p><p className="font-medium">{(c.rc_number as string) || "—"}</p></div>
+                                        <div><p className="text-xs text-muted-foreground">Address</p><p className="font-medium">{(c.address as string) || "—"}</p></div>
+                                        <div><p className="text-xs text-muted-foreground">Phone</p><p className="font-medium">{(c.phone as string) || "—"}</p></div>
+                                        <div><p className="text-xs text-muted-foreground">Entrance Fee</p><p className="font-medium">{c.entrance_fee_kobo ? `₦${((c.entrance_fee_kobo as number) / 100).toLocaleString()}` : "—"}</p></div>
+                                        <div className="col-span-2"><p className="text-xs text-muted-foreground">Settlement Bank</p><p className="font-medium whitespace-pre-line">{(c.bank_account_info as string) || "—"}</p></div>
+                                        <div><p className="text-xs text-muted-foreground">Authorized Signatory</p><p className="font-medium">{(c.authorized_signatory_name as string) || "—"}</p></div>
+                                        <div><p className="text-xs text-muted-foreground">Submitted</p><p className="font-medium">{c.kyb_submitted_at ? fmt(c.kyb_submitted_at as string) : "—"}</p></div>
+                                      </div>
+                                      {c.cac_certificate_url ? (
+                                        <a href={c.cac_certificate_url as string} target="_blank" rel="noreferrer" className="text-xs font-medium text-primary hover:underline">
+                                          View CAC certificate ↗
+                                        </a>
+                                      ) : null}
+
+                                      {c.status === "KYB_SUBMITTED" && (
+                                        <div className="mt-3">
+                                          {kybRejecting === c.id ? (
+                                            <div className="space-y-2 max-w-md">
+                                              <textarea
+                                                placeholder="Reason for rejection…"
+                                                rows={2}
+                                                value={kybRejectionReason}
+                                                onChange={(e) => setKybRejectionReason(e.target.value)}
+                                                className="w-full text-xs p-2 rounded-md border border-stone-300"
+                                              />
+                                              <div className="flex gap-2">
+                                                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setKybRejecting(null); setKybRejectionReason(""); }}>Cancel</Button>
+                                                <Button size="sm" variant="destructive" className="h-7 text-xs" disabled={!kybRejectionReason || actionLoading === c.id}
+                                                  onClick={() => reviewKyb(c.id, false, kybRejectionReason)}>
+                                                  {actionLoading === c.id ? "Rejecting…" : "Confirm Rejection"}
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          ) : actionLoading === c.id ? <Spinner sm /> : (
+                                            <div className="flex gap-2">
+                                              <Button size="sm" variant="outline" className="h-7 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                                onClick={() => reviewKyb(c.id, true)}>
+                                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+                                              </Button>
+                                              <Button size="sm" variant="outline" className="h-7 text-xs border-red-200 text-red-600 hover:bg-red-50"
+                                                onClick={() => setKybRejecting(c.id)}>
+                                                <Ban className="h-3.5 w-3.5 mr-1" /> Reject
+                                              </Button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
                                     Members — {c.name}
                                   </p>

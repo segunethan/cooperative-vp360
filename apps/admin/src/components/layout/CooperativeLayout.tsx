@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { CooperativeSidebar } from "./CooperativeSidebar";
 import { CooperativeHeader } from "./CooperativeHeader";
+import { KybBanner } from "./KybBanner";
 import { SessionGuard } from "@/components/SessionGuard";
 
 export const CooperativeLayout = () => {
@@ -16,6 +17,7 @@ export const CooperativeLayout = () => {
         />
         <div className="flex-1 flex flex-col overflow-hidden">
           <CooperativeHeader />
+          <KybBanner />
           <main className="flex-1 overflow-y-auto bg-muted/30 p-6">
             <Outlet />
           </main>

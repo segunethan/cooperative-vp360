@@ -42,6 +42,63 @@ serve(async (req) => {
   const body = await req.json();
   const { action, tenantId, status } = body;
 
+  // ── Review a cooperative's KYB submission (approve / reject) ──────────────
+  if (action === "review_kyb") {
+    const { approve, rejectionReason } = body as { approve?: boolean; rejectionReason?: string };
+    if (!tenantId || typeof approve !== "boolean") return err("tenantId and approve required");
+
+    const { data: tenant, error: fetchError } = await admin
+      .from("tenants")
+      .update({
+        status: approve ? "ACTIVE" : "KYB_REJECTED",
+        kyb_rejection_reason: approve ? null : (rejectionReason ?? null),
+        kyb_reviewed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", tenantId)
+      .select()
+      .single();
+
+    if (fetchError) return err(fetchError.message, 500);
+
+    // Email every admin on the cooperative — best-effort, doesn't block the response
+    try {
+      const { data: tenantUsers } = await admin.from("tenant_users").select("user_id").eq("tenant_id", tenantId);
+      const emails = (
+        await Promise.all(
+          (tenantUsers ?? []).map(async (row: { user_id: string }) => {
+            const { data } = await admin.auth.admin.getUserById(row.user_id);
+            return data.user?.email ?? null;
+          })
+        )
+      ).filter((e): e is string => !!e);
+
+      const resendKey = Deno.env.get("RESEND_API_KEY");
+      if (resendKey && emails.length > 0) {
+        const heading = approve ? "Your cooperative is verified" : "Business verification not approved";
+        const body_html = approve
+          ? `<p style="margin:0 0 12px;font-size:15px;color:#374151;">Hi ${tenant.name}, your business verification is approved. You can now invite members and start accepting contributions.</p>`
+          : `<p style="margin:0 0 12px;font-size:15px;color:#374151;">Hi ${tenant.name}, your business verification was not approved.</p>
+             ${rejectionReason ? `<p style="margin:0 0 12px;font-size:14px;color:#374151;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;"><strong>Reason:</strong> ${rejectionReason}</p>` : ""}
+             <p style="margin:0;font-size:14px;color:#374151;">Sign in to update your details and resubmit.</p>`;
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: "Jollify <noreply@thesegunadebayo.com>",
+            to: emails,
+            subject: approve ? "You're verified — start inviting members" : "Update on your business verification",
+            html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f5f5f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"><table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f4;padding:40px 16px;"><tr><td align="center"><table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e7e5e4;"><tr><td style="background:#012d1d;padding:28px 40px;"><span style="font-size:20px;font-weight:700;color:#ffffff;">Jollify</span></td></tr><tr><td style="background:linear-gradient(90deg,#c1ecd4,#6ee7b7);height:3px;font-size:0;">&nbsp;</td></tr><tr><td style="padding:40px 40px 32px;"><h1 style="margin:0 0 16px;font-size:22px;font-weight:800;color:#0a0a0a;">${heading}</h1>${body_html}</td></tr></table></td></tr></table></body></html>`,
+          }),
+        });
+      }
+    } catch {
+      // notification failure shouldn't block the review action
+    }
+
+    return ok(tenant);
+  }
+
   // ── List all cooperatives ──────────────────────────────────────────────────
   if (action === "list") {
     const { data: tenants, error } = await admin

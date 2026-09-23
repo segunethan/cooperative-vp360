@@ -1,17 +1,39 @@
 import { Card, CardContent } from "@jollify/shared/components/ui/card";
 import { Button } from "@jollify/shared/components/ui/button";
-import { Link2, Copy } from "lucide-react";
+import { Link2, Copy, Lock } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 
 const MembershipLinkCard = () => {
   const { tenant } = useAuth();
+  const navigate = useNavigate();
   const applyLink = tenant ? `${window.location.origin}/apply/${tenant.slug}` : "";
+  const verified = tenant?.status === "ACTIVE";
 
   const copyLink = () => {
     navigator.clipboard.writeText(applyLink);
     toast.success("Membership invitation link copied.");
   };
+
+  if (!verified) {
+    return (
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Lock className="h-4 w-4 text-muted-foreground" />
+            <p className="text-sm font-semibold text-foreground">Membership Invitation Link</p>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            Available once your business verification is approved — this keeps unverified cooperatives from publishing a live application link.
+          </p>
+          <Button type="button" variant="outline" size="sm" onClick={() => navigate("/cooperative/kyb")}>
+            Complete Business Verification
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
