@@ -12,10 +12,14 @@ export interface TenantPublicInfo {
 
 export interface MemberApplication {
   id: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   email: string;
-  phone: string | null;
-  about: string | null;
+  phone: string;
+  gender: string | null;
+  dateOfBirth: string | null;
+  address: string | null;
+  occupation: string | null;
   status: ApplicationStatus;
   rejectionReason: string | null;
   submittedAt: string;
@@ -34,17 +38,25 @@ export const fetchTenantPublicInfo = async (slug: string): Promise<TenantPublicI
 export const submitMemberApplication = async (params: {
   tenantId: string;
   cooperativeName: string;
-  fullName: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
-  about?: string;
+  gender?: string;
+  dateOfBirth?: string;
+  address?: string;
+  occupation?: string;
 }): Promise<void> => {
   const { error } = await supabase.from("member_applications").insert({
     tenant_id: params.tenantId,
-    full_name: params.fullName.trim(),
+    first_name: params.firstName.trim(),
+    last_name: params.lastName.trim(),
     email: params.email.trim().toLowerCase(),
-    phone: params.phone.trim() || null,
-    about: params.about?.trim() || null,
+    phone: params.phone.trim(),
+    gender: params.gender || null,
+    date_of_birth: params.dateOfBirth || null,
+    address: params.address?.trim() || null,
+    occupation: params.occupation?.trim() || null,
   });
   if (error) handleSupabaseError(error);
 
@@ -52,16 +64,30 @@ export const submitMemberApplication = async (params: {
     body: {
       type: "application_submitted",
       tenantId: params.tenantId,
-      memberName: params.fullName.trim(),
+      memberName: `${params.firstName.trim()} ${params.lastName.trim()}`,
       cooperativeName: params.cooperativeName,
       applicantEmail: params.email.trim().toLowerCase(),
-      applicantPhone: params.phone.trim() || undefined,
-      applicantAbout: params.about?.trim() || undefined,
+      applicantPhone: params.phone.trim(),
     },
   });
 };
 
 // ── Admin-facing ─────────────────────────────────────────────────────────────
+
+const toApplication = (row: Record<string, unknown>): MemberApplication => ({
+  id: row.id as string,
+  firstName: row.first_name as string,
+  lastName: row.last_name as string,
+  email: row.email as string,
+  phone: row.phone as string,
+  gender: (row.gender as string) ?? null,
+  dateOfBirth: (row.date_of_birth as string) ?? null,
+  address: (row.address as string) ?? null,
+  occupation: (row.occupation as string) ?? null,
+  status: row.status as ApplicationStatus,
+  rejectionReason: (row.rejection_reason as string) ?? null,
+  submittedAt: row.submitted_at as string,
+});
 
 export const fetchPendingApplications = async (): Promise<MemberApplication[]> => {
   const { data, error } = await supabase
@@ -70,16 +96,7 @@ export const fetchPendingApplications = async (): Promise<MemberApplication[]> =
     .eq("status", "PENDING")
     .order("submitted_at", { ascending: true });
   if (error) handleSupabaseError(error);
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    fullName: row.full_name,
-    email: row.email,
-    phone: row.phone,
-    about: row.about,
-    status: row.status,
-    rejectionReason: row.rejection_reason,
-    submittedAt: row.submitted_at,
-  }));
+  return (data ?? []).map(toApplication);
 };
 
 export const approveApplication = async (
@@ -87,14 +104,15 @@ export const approveApplication = async (
   application: MemberApplication,
   reviewerId: string
 ): Promise<{ memberNumber: string; fullName: string; email: string }> => {
-  const [firstName, ...rest] = application.fullName.trim().split(/\s+/);
-  const lastName = rest.join(" ") || firstName;
-
   const member = await addNewMember(tenantId, {
-    firstName,
-    lastName,
+    firstName: application.firstName,
+    lastName: application.lastName,
     email: application.email,
-    phone: application.phone ?? "",
+    phone: application.phone,
+    gender: application.gender ?? undefined,
+    dateOfBirth: application.dateOfBirth ?? undefined,
+    address: application.address ?? undefined,
+    occupation: application.occupation ?? undefined,
   });
 
   const { error } = await supabase

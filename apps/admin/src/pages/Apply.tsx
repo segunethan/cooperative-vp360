@@ -4,13 +4,25 @@ import { Button } from "@jollify/shared/components/ui/button";
 import { Input } from "@jollify/shared/components/ui/input";
 import { Label } from "@jollify/shared/components/ui/label";
 import { Textarea } from "@jollify/shared/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@jollify/shared/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import { fetchTenantPublicInfo, submitMemberApplication } from "@jollify/shared/lib/api/applications";
 import { CheckCircle2, Building2 } from "lucide-react";
 
+const EMPTY_FORM = {
+  firstName: "", lastName: "", email: "", phone: "",
+  gender: "", dateOfBirth: "", address: "", occupation: "",
+};
+
 const Apply = () => {
   const { slug } = useParams<{ slug: string }>();
-  const [form, setForm] = useState({ fullName: "", email: "", phone: "", about: "" });
+  const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -22,6 +34,10 @@ const Apply = () => {
     retry: false,
   });
 
+  const set = (field: keyof typeof EMPTY_FORM) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tenant) return;
@@ -31,10 +47,14 @@ const Apply = () => {
       await submitMemberApplication({
         tenantId: tenant.id,
         cooperativeName: tenant.name,
-        fullName: form.fullName,
+        firstName: form.firstName,
+        lastName: form.lastName,
         email: form.email,
         phone: form.phone,
-        about: form.about,
+        gender: form.gender || undefined,
+        dateOfBirth: form.dateOfBirth || undefined,
+        address: form.address || undefined,
+        occupation: form.occupation || undefined,
       });
       setSubmitted(true);
     } catch (err) {
@@ -65,8 +85,8 @@ const Apply = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6">
-      <div className="w-full max-w-md space-y-8">
+    <div className="min-h-screen bg-background flex items-center justify-center p-6 py-12">
+      <div className="w-full max-w-lg space-y-8">
         <div className="text-center">
           <div className="w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center mx-auto mb-4">
             <Building2 className="h-5 w-5 text-primary" />
@@ -85,23 +105,56 @@ const Apply = () => {
         ) : (
           <>
             {error && <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">{error}</div>}
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-1.5">
-                <Label htmlFor="fullName">Full Name *</Label>
-                <Input id="fullName" required autoComplete="name" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} className="h-10" />
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="firstName">First Name *</Label>
+                  <Input id="firstName" placeholder="John" required autoComplete="given-name" value={form.firstName} onChange={set("firstName")} className="h-10" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lastName">Last Name *</Label>
+                  <Input id="lastName" placeholder="Doe" required autoComplete="family-name" value={form.lastName} onChange={set("lastName")} className="h-10" />
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="email">Email Address *</Label>
-                <Input id="email" type="email" required autoComplete="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="h-10" />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="email">Email Address *</Label>
+                  <Input id="email" type="email" required autoComplete="email" value={form.email} onChange={set("email")} className="h-10" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="phone">Phone Number *</Label>
+                  <Input id="phone" type="tel" placeholder="+234 801 234 5678" required autoComplete="tel" value={form.phone} onChange={set("phone")} className="h-10" />
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="phone">Phone Number *</Label>
-                <Input id="phone" type="tel" required autoComplete="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="h-10" />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="gender">Gender</Label>
+                  <Select value={form.gender} onValueChange={(v) => setForm((p) => ({ ...p, gender: v }))}>
+                    <SelectTrigger id="gender"><SelectValue placeholder="Select gender" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Female">Female</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="dob">Date of Birth</Label>
+                  <Input id="dob" type="date" value={form.dateOfBirth} onChange={set("dateOfBirth")} className="h-10" />
+                </div>
               </div>
+
               <div className="space-y-1.5">
-                <Label htmlFor="about">Tell us a bit about yourself</Label>
-                <Textarea id="about" rows={3} placeholder="Why do you want to join?" value={form.about} onChange={(e) => setForm({ ...form, about: e.target.value })} />
+                <Label htmlFor="address">Residential Address</Label>
+                <Textarea id="address" placeholder="12 Marina Road, Lagos Island, Lagos" rows={2} value={form.address} onChange={set("address")} />
               </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="occupation">Occupation</Label>
+                <Input id="occupation" placeholder="Software Engineer, Teacher, etc." value={form.occupation} onChange={set("occupation")} className="h-10" />
+              </div>
+
               <Button type="submit" className="w-full h-10 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold" disabled={loading}>
                 {loading ? "Submitting…" : "Submit Application"}
               </Button>

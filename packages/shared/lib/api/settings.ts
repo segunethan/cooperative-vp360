@@ -15,6 +15,7 @@ export interface CooperativeProfile {
   billingPlan: string;
   trialEndsAt: string | null;
   entranceFeeKobo: number | null;
+  bankAccountInfo: string | null;
 }
 
 export interface UpdateCooperativeProfileData {
@@ -56,13 +57,21 @@ export const fetchCooperativeProfile = async (tenantId: string): Promise<Coopera
     billingPlan: data!.billing_plan,
     trialEndsAt: data!.trial_ends_at ?? null,
     entranceFeeKobo: data!.entrance_fee_kobo ?? null,
+    bankAccountInfo: data!.bank_account_info ?? null,
   };
 };
 
-export const updateEntranceFee = async (tenantId: string, entranceFeeKobo: number | null): Promise<void> => {
+export const updateMembershipSettings = async (
+  tenantId: string,
+  data: { entranceFeeKobo: number | null; bankAccountInfo: string | null }
+): Promise<void> => {
   const { error } = await supabase
     .from("tenants")
-    .update({ entrance_fee_kobo: entranceFeeKobo, updated_at: new Date().toISOString() })
+    .update({
+      entrance_fee_kobo: data.entranceFeeKobo,
+      bank_account_info: data.bankAccountInfo,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", tenantId);
   if (error) handleSupabaseError(error);
 };
@@ -116,8 +125,16 @@ export const updateTenantUserRole = async (
   if (error) handleSupabaseError(error);
 };
 
-export const fetchEntranceFee = async (tenantId: string): Promise<number | null> => {
-  const { data, error } = await supabase.from("tenants").select("entrance_fee_kobo").eq("id", tenantId).maybeSingle();
+export interface MembershipSettings {
+  entranceFeeKobo: number | null;
+  bankAccountInfo: string | null;
+}
+
+export const fetchMembershipSettings = async (tenantId: string): Promise<MembershipSettings> => {
+  const { data, error } = await supabase.from("tenants").select("entrance_fee_kobo, bank_account_info").eq("id", tenantId).maybeSingle();
   if (error) handleSupabaseError(error);
-  return data?.entrance_fee_kobo ?? null;
+  return {
+    entranceFeeKobo: data?.entrance_fee_kobo ?? null,
+    bankAccountInfo: data?.bank_account_info ?? null,
+  };
 };

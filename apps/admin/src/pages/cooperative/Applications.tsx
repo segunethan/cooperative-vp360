@@ -90,7 +90,7 @@ const Applications = () => {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
-                  <TableHead>About</TableHead>
+                  <TableHead>Occupation</TableHead>
                   <TableHead>Submitted</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -110,10 +110,10 @@ const Applications = () => {
                 ) : (
                   applications.map((a) => (
                     <TableRow key={a.id}>
-                      <TableCell className="font-medium">{a.fullName}</TableCell>
+                      <TableCell className="font-medium">{a.firstName} {a.lastName}</TableCell>
                       <TableCell>{a.email}</TableCell>
-                      <TableCell>{a.phone ?? "—"}</TableCell>
-                      <TableCell className="max-w-xs truncate">{a.about ?? "—"}</TableCell>
+                      <TableCell>{a.phone}</TableCell>
+                      <TableCell>{a.occupation ?? "—"}</TableCell>
                       <TableCell>{new Date(a.submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
@@ -145,7 +145,7 @@ const Applications = () => {
       <Dialog open={!!rejecting} onOpenChange={(o) => !o && setRejecting(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Reject Application — {rejecting?.fullName}</DialogTitle>
+            <DialogTitle>Reject Application — {rejecting?.firstName} {rejecting?.lastName}</DialogTitle>
           </DialogHeader>
           <Textarea placeholder="Reason (optional)" rows={3} value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} />
           <DialogFooter>

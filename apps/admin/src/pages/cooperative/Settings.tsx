@@ -4,6 +4,7 @@ import { Button } from "@jollify/shared/components/ui/button";
 import { Badge } from "@jollify/shared/components/ui/badge";
 import { Input } from "@jollify/shared/components/ui/input";
 import { Label } from "@jollify/shared/components/ui/label";
+import { Textarea } from "@jollify/shared/components/ui/textarea";
 import { Skeleton } from "@jollify/shared/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@jollify/shared/components/ui/tabs";
 import {
@@ -37,7 +38,7 @@ import {
   fetchTenantUsers,
   updateCooperativeProfile,
   updateTenantUserRole,
-  updateEntranceFee,
+  updateMembershipSettings,
 } from "@jollify/shared/lib/api/settings";
 import { nairaToKobo, formatMoneyFull } from "@jollify/shared/lib/money";
 import { useAuth } from "@/context/AuthContext";
@@ -103,19 +104,30 @@ const Settings = () => {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  // ── Membership Settings (entrance fee + public application link) ────────────
+  // ── Membership Settings (entrance fee + cooperative bank details + application link) ──
   const [entranceFeeNaira, setEntranceFeeNaira] = useState("");
+  const [bankAccountInfo, setBankAccountInfo] = useState("");
 
   useEffect(() => {
-    if (profile) setEntranceFeeNaira(profile.entranceFeeKobo ? String(profile.entranceFeeKobo / 100) : "");
+    if (profile) {
+      setEntranceFeeNaira(profile.entranceFeeKobo ? String(profile.entranceFeeKobo / 100) : "");
+      setBankAccountInfo(profile.bankAccountInfo ?? "");
+    }
   }, [profile]);
 
-  const entranceFeeDirty = profile && entranceFeeNaira !== (profile.entranceFeeKobo ? String(profile.entranceFeeKobo / 100) : "");
+  const membershipSettingsDirty =
+    profile &&
+    (entranceFeeNaira !== (profile.entranceFeeKobo ? String(profile.entranceFeeKobo / 100) : "") ||
+      bankAccountInfo !== (profile.bankAccountInfo ?? ""));
 
-  const entranceFeeMutation = useMutation({
-    mutationFn: () => updateEntranceFee(tenantId, entranceFeeNaira ? nairaToKobo(parseFloat(entranceFeeNaira)) : null),
+  const membershipSettingsMutation = useMutation({
+    mutationFn: () =>
+      updateMembershipSettings(tenantId, {
+        entranceFeeKobo: entranceFeeNaira ? nairaToKobo(parseFloat(entranceFeeNaira)) : null,
+        bankAccountInfo: bankAccountInfo.trim() || null,
+      }),
     onSuccess: () => {
-      toast.success("Entrance fee updated.");
+      toast.success("Membership settings updated.");
       queryClient.invalidateQueries({ queryKey: ["cooperative-profile", tenantId] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -283,9 +295,23 @@ const Settings = () => {
                       {profile?.entranceFeeKobo ? ` Currently ${formatMoneyFull(profile.entranceFeeKobo)}.` : " Not set — onboarding will show no fee due."}
                     </p>
                   </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Cooperative Bank Details</Label>
+                    <Textarea
+                      placeholder="Bank, account number, and account name — e.g. GTBank, 0123456789, GopherWood Cooperative Ltd"
+                      rows={2}
+                      value={bankAccountInfo}
+                      onChange={(e) => setBankAccountInfo(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Shown to members during onboarding so they know where to pay the entrance fee.
+                    </p>
+                  </div>
+
                   <div className="flex justify-end">
-                    <Button size="sm" disabled={!entranceFeeDirty || entranceFeeMutation.isPending} onClick={() => entranceFeeMutation.mutate()}>
-                      {entranceFeeMutation.isPending ? "Saving…" : "Save Fee"}
+                    <Button size="sm" disabled={!membershipSettingsDirty || membershipSettingsMutation.isPending} onClick={() => membershipSettingsMutation.mutate()}>
+                      {membershipSettingsMutation.isPending ? "Saving…" : "Save Membership Settings"}
                     </Button>
                   </div>
                 </CardContent>

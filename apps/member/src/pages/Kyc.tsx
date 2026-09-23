@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ShieldCheck } from "lucide-react";
 import { useMemberProfile, useInvalidateMemberProfile } from "@/hooks/useMemberProfile";
 import { submitKyc, fetchOwnKyc, type KycFormData, type KycIdType } from "@jollify/shared/lib/api/kyc";
-import { fetchEntranceFee } from "@jollify/shared/lib/api/settings";
+import { fetchMembershipSettings } from "@jollify/shared/lib/api/settings";
 import { formatMoneyFull, nairaToKobo, generatePaymentReference } from "@jollify/shared/lib/money";
 import { supabase } from "@jollify/shared/lib/supabase";
 import { useQuery } from "@tanstack/react-query";
@@ -68,11 +68,13 @@ const Kyc = () => {
     enabled: !!profile,
   });
 
-  const { data: entranceFeeKobo = null } = useQuery({
-    queryKey: ["entrance-fee", profile?.tenantId],
-    queryFn: () => fetchEntranceFee(profile!.tenantId),
+  const { data: membershipSettings } = useQuery({
+    queryKey: ["membership-settings", profile?.tenantId],
+    queryFn: () => fetchMembershipSettings(profile!.tenantId),
     enabled: !!profile,
   });
+  const entranceFeeKobo = membershipSettings?.entranceFeeKobo ?? null;
+  const bankAccountInfo = membershipSettings?.bankAccountInfo ?? null;
 
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<KycFormData>(EMPTY_FORM);
@@ -289,6 +291,16 @@ const Kyc = () => {
                   <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 mb-1">Entrance Fee (Non-Refundable)</p>
                   <p className="text-lg font-bold text-emerald-800">{formatMoneyFull(entranceFeeKobo!)}</p>
                 </div>
+                {bankAccountInfo ? (
+                  <div className="rounded-lg bg-muted/50 border border-border px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Pay Into</p>
+                    <p className="text-sm text-foreground whitespace-pre-line">{bankAccountInfo}</p>
+                  </div>
+                ) : (
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+                    Your cooperative hasn't set up a payment account yet. Contact your admin before paying.
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Date Paid *</label>
                   <input type="date" max={new Date().toISOString().split("T")[0]} value={feePaidDate} onChange={(e) => setFeePaidDate(e.target.value)} className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm" />
