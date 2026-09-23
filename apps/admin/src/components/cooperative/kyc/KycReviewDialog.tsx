@@ -11,41 +11,39 @@ import { Textarea } from "@jollify/shared/components/ui/textarea";
 import { Label } from "@jollify/shared/components/ui/label";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { reviewKycSubmission, type PendingKycRow } from "@jollify/shared/lib/api/kyc";
-import { formatMoneyFull } from "@jollify/shared/lib/money";
+import { notifyRequestReviewed } from "@jollify/shared/lib/api/products";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
-import { ShieldCheck, FileText, ExternalLink } from "lucide-react";
-
-const idTypeLabel: Record<string, string> = {
-  NIN: "National ID (NIN)",
-  PASSPORT: "International Passport",
-  DRIVERS_LICENSE: "Driver's License",
-  VOTERS_CARD: "Voter's Card",
-};
+import { ShieldCheck } from "lucide-react";
+import KycDetails from "./KycDetails";
 
 interface Props {
   submission: PendingKycRow | null;
   onClose: () => void;
 }
 
-const Field = ({ label, value }: { label: string; value: string }) => (
-  <div>
-    <p className="text-xs text-muted-foreground">{label}</p>
-    <p className="text-sm font-medium text-foreground">{value || "—"}</p>
-  </div>
-);
-
 const KycReviewDialog = ({ submission, onClose }: Props) => {
-  const { user } = useAuth();
+  const { user, tenant } = useAuth();
   const queryClient = useQueryClient();
   const [rejectionReason, setRejectionReason] = useState("");
   const [showReject, setShowReject] = useState(false);
 
   const mutation = useMutation({
-    mutationFn: (approve: boolean) =>
-      reviewKycSubmission(submission!.id, approve, user?.id ?? "", rejectionReason || undefined),
+    mutationFn: async (approve: boolean) => {
+      await reviewKycSubmission(submission!.id, approve, user?.id ?? "", rejectionReason || undefined);
+      if (submission!.memberEmail) {
+        await notifyRequestReviewed({
+          memberEmail: submission!.memberEmail,
+          memberName: submission!.memberName,
+          cooperativeName: tenant?.name ?? "your cooperative",
+          requestLabel: "Membership onboarding (KYC)",
+          status: approve ? "APPROVED" : "REJECTED",
+          reason: approve ? undefined : rejectionReason || undefined,
+        });
+      }
+    },
     onSuccess: (_, approve) => {
-      toast.success(approve ? "KYC approved." : "KYC rejected.");
+      toast.success(approve ? "KYC approved." : "KYC rejected — the member has been notified by email.");
       queryClient.invalidateQueries({ queryKey: ["pending-kyc"] });
       handleClose();
     },
@@ -70,64 +68,7 @@ const KycReviewDialog = ({ submission, onClose }: Props) => {
 
         {submission && (
           <div className="space-y-5 py-2">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Bank Details</p>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Bank Name" value={submission.bankName} />
-                <Field label="Account Number" value={submission.accountNumber} />
-                <Field label="Account Name" value={submission.accountName} />
-                <Field label="BVN" value={submission.bvn} />
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Identity Document</p>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="NIN" value={submission.nin} />
-                <Field label="ID Type" value={idTypeLabel[submission.idType] ?? submission.idType} />
-                <Field label="ID Number" value={submission.idNumber} />
-                <Field label="Expiry Date" value={new Date(submission.idExpiryDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} />
-                <Field label="Secret Question" value={submission.secretQuestion} />
-              </div>
-              {submission.idDocumentUrl && (
-                <a href={submission.idDocumentUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-primary text-xs font-medium hover:underline">
-                  <FileText className="h-3.5 w-3.5" /> View uploaded ID document <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Declarations</p>
-              <div className="grid grid-cols-1 gap-3">
-                <Field label="Not a member of another society with identical objectives" value={submission.notInOtherSociety ? "Confirmed" : "Not confirmed"} />
-                <Field label="Existing debt declaration" value={submission.existingDebtDeclaration || "None declared"} />
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Next of Kin</p>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Full Name" value={submission.nextOfKinName} />
-                <Field label="Relationship" value={submission.nextOfKinRelationship} />
-                <Field label="Phone" value={submission.nextOfKinPhone} />
-                <Field label="Address" value={submission.nextOfKinAddress} />
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Entrance Fee & Thrift</p>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Entrance Fee" value={submission.entranceFeeKobo ? formatMoneyFull(submission.entranceFeeKobo) : "Not required"} />
-                <Field label="Fee Paid Date" value={submission.entranceFeePaidDate ? new Date(submission.entranceFeePaidDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"} />
-                <Field label="Monthly Thrift Commitment" value={submission.monthlyThriftKobo ? formatMoneyFull(submission.monthlyThriftKobo) : "—"} />
-                <Field label="Signature" value={submission.signatureName} />
-              </div>
-              {submission.entranceFeeReceiptUrl && (
-                <a href={submission.entranceFeeReceiptUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-primary text-xs font-medium hover:underline">
-                  <FileText className="h-3.5 w-3.5" /> View entrance fee receipt <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
-            </div>
+            <KycDetails submission={submission} showStatus={false} />
 
             {showReject && (
               <div className="space-y-1.5">

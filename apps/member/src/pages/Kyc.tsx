@@ -222,11 +222,63 @@ const Kyc = () => {
   }
 
   if (existing?.status === "APPROVED") {
+    const fmtDate = (d: string | null) =>
+      d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
+    const Info = ({ label, value }: { label: string; value: string }) => (
+      <div>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-sm font-medium text-foreground">{value || "—"}</p>
+      </div>
+    );
     return (
-      <div className="py-16 text-center space-y-3">
-        <ShieldCheck className="h-10 w-10 text-emerald-500 mx-auto" />
-        <p className="font-semibold text-foreground">You're a fully onboarded member</p>
-        <p className="text-sm text-muted-foreground">You have full access to products, loans, and contributions.</p>
+      <div className="space-y-5">
+        <div className="text-center space-y-2 py-4">
+          <ShieldCheck className="h-10 w-10 text-emerald-500 mx-auto" />
+          <p className="font-semibold text-foreground">You're a fully onboarded member</p>
+          <p className="text-sm text-muted-foreground">You have full access to products, loans, and contributions.</p>
+        </div>
+
+        <div className="bg-white rounded-xl border border-border p-4 space-y-5">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <span>Submitted {fmtDate(existing.submittedAt)}</span>
+            {existing.reviewedAt && <span>· Approved {fmtDate(existing.reviewedAt)}</span>}
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Bank Details</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Info label="Bank Name" value={existing.bankName} />
+              <Info label="Account Number" value={existing.accountNumber} />
+              <Info label="Account Name" value={existing.accountName} />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Identity</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Info label="ID Type" value={idTypeLabel[existing.idType] ?? existing.idType} />
+              <Info label="ID Number" value={existing.idNumber} />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Next of Kin</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Info label="Full Name" value={existing.nextOfKinName} />
+              <Info label="Relationship" value={existing.nextOfKinRelationship} />
+              <Info label="Phone" value={existing.nextOfKinPhone} />
+              <Info label="Address" value={existing.nextOfKinAddress} />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Entrance Fee & Thrift</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Info label="Entrance Fee" value={existing.entranceFeeKobo ? formatMoneyFull(existing.entranceFeeKobo) : "Not required"} />
+              <Info label="Monthly Thrift Commitment" value={existing.monthlyThriftKobo ? formatMoneyFull(existing.monthlyThriftKobo) : "—"} />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

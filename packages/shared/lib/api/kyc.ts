@@ -32,6 +32,7 @@ export interface KycSubmission {
   status: KycStatus;
   rejectionReason: string | null;
   submittedAt: string;
+  reviewedAt: string | null;
 }
 
 export interface KycFormData {
@@ -87,6 +88,7 @@ const toSubmission = (row: Record<string, unknown>): KycSubmission => ({
   status: row.status as KycStatus,
   rejectionReason: (row.rejection_reason as string) ?? null,
   submittedAt: row.submitted_at as string,
+  reviewedAt: (row.reviewed_at as string) ?? null,
 });
 
 // ── Member-facing ────────────────────────────────────────────────────────────
@@ -145,19 +147,23 @@ export const submitKyc = async (tenantId: string, memberId: string, form: KycFor
 export interface PendingKycRow extends KycSubmission {
   memberName: string;
   memberNumber: string;
+  memberEmail: string;
 }
+
+type MemberJoin = { full_name: string; member_number: string; email: string | null } | null;
 
 export const fetchPendingKyc = async (): Promise<PendingKycRow[]> => {
   const { data, error } = await supabase
     .from("member_kyc_submissions")
-    .select("*, members(full_name, member_number)")
+    .select("*, members(full_name, member_number, email)")
     .eq("status", "PENDING")
     .order("submitted_at", { ascending: true });
   if (error) handleSupabaseError(error);
   return (data ?? []).map((row) => ({
     ...toSubmission(row),
-    memberName: (row.members as unknown as { full_name: string; member_number: string } | null)?.full_name ?? "—",
-    memberNumber: (row.members as unknown as { full_name: string; member_number: string } | null)?.member_number ?? "",
+    memberName: (row.members as unknown as MemberJoin)?.full_name ?? "—",
+    memberNumber: (row.members as unknown as MemberJoin)?.member_number ?? "",
+    memberEmail: (row.members as unknown as MemberJoin)?.email ?? "",
   }));
 };
 

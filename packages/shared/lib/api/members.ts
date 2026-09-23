@@ -27,6 +27,7 @@ export interface NewMemberFormData {
 }
 
 export interface MemberProfile {
+  id: string;
   memberNumber: string;
   name: string;
   email: string;
@@ -164,6 +165,7 @@ export const fetchMemberProfile = async (memberNumber: string): Promise<MemberPr
   const loanTotalKobo = (loanResult.data ?? []).reduce((s, r) => s + r.principal_kobo, 0);
 
   return {
+    id: data.id,
     memberNumber: data.member_number,
     name: data.full_name,
     email: data.email ?? "",

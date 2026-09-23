@@ -45,10 +45,22 @@ const Members = () => {
 
   // ── Mutations ─────────────────────────────────────────────────────────────
   const approveMutation = useMutation({
-    mutationFn: approveMemberApplication,
+    mutationFn: async (memberNumber: string) => {
+      const member = members.find((m) => m.id === memberNumber);
+      await approveMemberApplication(memberNumber);
+      if (member) {
+        await sendMemberInviteEmail(
+          memberNumber,
+          member.name,
+          member.email,
+          tenant?.name ?? "your cooperative",
+          tenant?.cooperative_number
+        );
+      }
+    },
     onSuccess: (_, memberNumber) => {
       invalidateMembers();
-      toast({ title: "Member Approved", description: `${memberNumber} is now active.` });
+      toast({ title: "Member Approved", description: `${memberNumber} is now active — an invite email has been sent.` });
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });

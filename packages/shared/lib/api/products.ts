@@ -452,8 +452,9 @@ export const notifyRequestReviewed = async (params: {
   memberName: string;
   cooperativeName: string;
   requestLabel: string;
-  amountLabel: string;
+  amountLabel?: string;
   status: "APPROVED" | "REJECTED";
+  reason?: string;
 }): Promise<void> => {
   await supabase.functions.invoke("send-notification", {
     body: { type: "request_reviewed", ...params },

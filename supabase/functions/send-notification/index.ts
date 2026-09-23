@@ -13,8 +13,9 @@ interface NotificationPayload {
   memberName: string;
   cooperativeName: string;
   requestLabel?: string;  // e.g. "GopherEdge subscription", "Loan top-up", "GopherHold withdrawal"
-  amountLabel?: string;   // formatted, e.g. "₦500,000"
+  amountLabel?: string;   // formatted, e.g. "₦500,000" — omit for non-monetary requests like KYC
   status?: "APPROVED" | "REJECTED"; // only for request_reviewed
+  reason?: string;        // request_reviewed only — shown when status is REJECTED
   applicantEmail?: string;  // application_submitted only
   applicantPhone?: string;  // application_submitted only
   applicantAbout?: string;  // application_submitted only
@@ -126,13 +127,16 @@ serve(async (req) => {
       recipients = [payload.memberEmail];
 
       const approved = payload.status === "APPROVED";
+      const amountSuffix = amountLabel ? ` (${amountLabel})` : "";
       subject = approved ? `Your request was approved — ${requestLabel}` : `Update on your request — ${requestLabel}`;
       html = emailShell(
         approved ? "Your request was approved" : "Your request was not approved",
         `<p style="margin:0 0 12px;font-size:15px;color:#374151;">
-          Hi ${memberName}, your request for <strong>${requestLabel}</strong> (${amountLabel}) at ${cooperativeName} has been
+          Hi ${memberName}, your request for <strong>${requestLabel}</strong>${amountSuffix} at ${cooperativeName} has been
           <strong style="color:${approved ? "#15803d" : "#b91c1c"};">${approved ? "approved" : "declined"}</strong>.
         </p>
+        ${!approved && payload.reason ? `<p style="margin:0 0 12px;font-size:14px;color:#374151;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;"><strong>Reason:</strong> ${payload.reason}</p>` : ""}
+        ${!approved ? `<p style="margin:0 0 12px;font-size:14px;color:#374151;">You can update your details and resubmit from your member portal.</p>` : ""}
         <p style="margin:0;font-size:14px;color:#6b7280;">Sign in to your member portal for full details.</p>`
       );
     }

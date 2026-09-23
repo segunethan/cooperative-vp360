@@ -24,6 +24,7 @@ import {
   Briefcase,
   Calendar,
   AlertCircle,
+  FileCheck,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -31,6 +32,8 @@ import {
   fetchMemberContributionHistory,
   fetchMemberLoanHistory,
 } from "@jollify/shared/lib/api/members";
+import { fetchOwnKyc } from "@jollify/shared/lib/api/kyc";
+import KycDetails from "@/components/cooperative/kyc/KycDetails";
 
 const statusColors: Record<string, string> = {
   Active:   "bg-success/10 text-success border-success/20",
@@ -74,6 +77,12 @@ const MemberProfile = () => {
     queryKey: ["member-loans", memberNumber],
     queryFn: () => fetchMemberLoanHistory(memberNumber),
     enabled: !!memberNumber,
+  });
+
+  const { data: kyc, isLoading: loadingKyc } = useQuery({
+    queryKey: ["member-kyc", profile?.id],
+    queryFn: () => fetchOwnKyc(profile!.id),
+    enabled: !!profile?.id,
   });
 
   if (profileError) {
@@ -164,6 +173,7 @@ const MemberProfile = () => {
       <Tabs defaultValue="personal">
         <TabsList>
           <TabsTrigger value="personal"><User className="h-4 w-4 mr-1" />Personal Info</TabsTrigger>
+          <TabsTrigger value="kyc"><FileCheck className="h-4 w-4 mr-1" />KYC & Onboarding</TabsTrigger>
           <TabsTrigger value="contributions"><CreditCard className="h-4 w-4 mr-1" />Contributions</TabsTrigger>
           <TabsTrigger value="loans"><Landmark className="h-4 w-4 mr-1" />Loans</TabsTrigger>
         </TabsList>
@@ -196,6 +206,27 @@ const MemberProfile = () => {
                     </div>
                   ))}
                 </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── KYC & Onboarding ── */}
+        <TabsContent value="kyc">
+          <Card>
+            <CardHeader><CardTitle>KYC & Onboarding</CardTitle></CardHeader>
+            <CardContent>
+              {loadingKyc ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+                </div>
+              ) : !kyc ? (
+                <div className="flex flex-col items-center py-10 text-center text-muted-foreground">
+                  <FileCheck className="h-8 w-8 mb-2 opacity-30" />
+                  <p className="text-sm">This member has not submitted an onboarding form yet.</p>
+                </div>
+              ) : (
+                <KycDetails submission={kyc} />
               )}
             </CardContent>
           </Card>
