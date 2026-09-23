@@ -84,6 +84,39 @@ const Kyc = () => {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [thriftNaira, setThriftNaira] = useState(form.monthlyThriftKobo ? String(form.monthlyThriftKobo / 100) : "");
+  const [feePaidDate, setFeePaidDate] = useState(form.entranceFeePaidDate ?? new Date().toISOString().split("T")[0]);
+
+  // Mobile browsers frequently reload the page after the app is backgrounded
+  // (memory pressure eviction, not something we control) — auto-save a draft
+  // so a minimize mid-form doesn't wipe out everything typed so far.
+  const draftKey = profile ? `kyc-draft-${profile.memberId}` : null;
+
+  useEffect(() => {
+    if (!draftKey) return;
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) {
+        const draft = JSON.parse(saved);
+        if (draft.form) setForm(draft.form);
+        if (typeof draft.step === "number") setStep(draft.step);
+        if (typeof draft.thriftNaira === "string") setThriftNaira(draft.thriftNaira);
+        if (typeof draft.feePaidDate === "string") setFeePaidDate(draft.feePaidDate);
+      }
+    } catch {
+      // corrupted draft — ignore, start fresh
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftKey || submitted) return;
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({ form, step, thriftNaira, feePaidDate }));
+    } catch {
+      // storage full/unavailable — draft saving is best-effort only
+    }
+  });
 
   useEffect(() => {
     if (existing && (existing.status === "REJECTED" || existing.status === "PENDING")) {
@@ -108,8 +141,6 @@ const Kyc = () => {
   const markTouched = (key: string) => setTouched((t) => ({ ...t, [key]: true }));
 
   const feeRequired = !!entranceFeeKobo && entranceFeeKobo > 0;
-  const [thriftNaira, setThriftNaira] = useState(form.monthlyThriftKobo ? String(form.monthlyThriftKobo / 100) : "");
-  const [feePaidDate, setFeePaidDate] = useState(form.entranceFeePaidDate ?? new Date().toISOString().split("T")[0]);
 
   const stepErrors: Record<number, Record<string, string>> = {
     0: {
@@ -171,6 +202,7 @@ const Kyc = () => {
         entranceFeePaidDate: feeRequired ? feePaidDate : undefined,
       }, existing?.status === "REJECTED");
       setSubmitted(true);
+      if (draftKey) localStorage.removeItem(draftKey);
       invalidateProfile();
     } catch (err) {
       setError((err as Error).message);
