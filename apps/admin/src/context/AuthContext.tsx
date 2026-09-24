@@ -68,13 +68,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      // Don't flip loading back to true here — Supabase fires TOKEN_REFRESHED
+      // (and sometimes SIGNED_IN again) every time the tab regains focus after
+      // being backgrounded, which would otherwise unmount the whole app behind
+      // a full-page spinner on every minimize/return even though the session
+      // was already valid. Only the very first load (above) should gate that.
       setSession(session);
       if (session?.user) {
-        setLoading(true);
-        loadTenant(session.user.id).finally(() => setLoading(false));
+        loadTenant(session.user.id);
       } else {
         setTenant(null);
-        setLoading(false);
       }
     });
 

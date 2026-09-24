@@ -4,6 +4,7 @@ import { cn } from "@jollify/shared/lib/utils";
 import { useMemberProfile } from "@/hooks/useMemberProfile";
 import { useQuery } from "@tanstack/react-query";
 import { fetchOwnKyc } from "@jollify/shared/lib/api/kyc";
+import { SessionGuard } from "@/components/SessionGuard";
 
 const navItems = [
   { label: "Home", icon: Home, href: "/member" },
@@ -34,6 +35,7 @@ const MemberLayout = () => {
     : "Complete your membership onboarding to unlock the app";
 
   return (
+    <SessionGuard>
     <div className="min-h-dvh bg-background flex flex-col">
       <header className="border-b border-border bg-white sticky top-0 z-20">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -89,6 +91,7 @@ const MemberLayout = () => {
         </div>
       </nav>
     </div>
+    </SessionGuard>
   );
 };
 
