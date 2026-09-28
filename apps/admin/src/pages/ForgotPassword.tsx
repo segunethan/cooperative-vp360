@@ -5,6 +5,7 @@ import { Input } from "@jollify/shared/components/ui/input";
 import { Label } from "@jollify/shared/components/ui/label";
 import { ArrowLeft, MailCheck } from "lucide-react";
 import { supabase } from "@jollify/shared/lib/supabase";
+import { emailError } from "@jollify/shared/lib/validation";
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState("");
@@ -14,6 +15,8 @@ const ForgotPassword = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const emailErr = emailError(email);
+    if (emailErr) { setError(emailErr); return; }
     setError(null);
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {

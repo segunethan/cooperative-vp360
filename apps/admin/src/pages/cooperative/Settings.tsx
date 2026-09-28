@@ -44,6 +44,8 @@ import { nairaToKobo, formatMoneyFull } from "@jollify/shared/lib/money";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import MembershipLinkCard from "@/components/cooperative/members/MembershipLinkCard";
+import PhoneInput from "@jollify/shared/components/PhoneInput";
+import { emailError, phoneError } from "@jollify/shared/lib/validation";
 
 const PLAN_COLORS: Record<string, string> = {
   trial:      "bg-warning/10 text-warning border-warning/20",
@@ -94,6 +96,11 @@ const Settings = () => {
      profileForm.phone    !== (profile.phone ?? "")    ||
      profileForm.address  !== (profile.address ?? "")  ||
      profileForm.rcNumber !== (profile.rcNumber ?? ""));
+
+  const [profileTouched, setProfileTouched] = useState<Record<string, boolean>>({});
+  const profileEmailErr = emailError(profileForm.email);
+  const profilePhoneErr = phoneError(profileForm.phone, 11, false);
+  const profileErrFor = (key: string, msg: string) => (profileTouched[key] ? msg : undefined);
 
   const saveMutation = useMutation({
     mutationFn: () => updateCooperativeProfile(tenantId, profileForm),
@@ -231,16 +238,18 @@ const Settings = () => {
                           type="email"
                           value={profileForm.email}
                           onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                          onBlur={() => setProfileTouched((t) => ({ ...t, email: true }))}
                         />
+                        {profileErrFor("email", profileEmailErr) && <p className="text-xs text-red-600">{profileErrFor("email", profileEmailErr)}</p>}
                       </div>
 
                       <div className="space-y-1.5">
                         <Label>Phone Number</Label>
-                        <Input
-                          type="tel"
-                          placeholder="+234 800 000 0000"
+                        <PhoneInput
                           value={profileForm.phone}
-                          onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                          onChange={(v) => setProfileForm({ ...profileForm, phone: v })}
+                          onBlur={() => setProfileTouched((t) => ({ ...t, phone: true }))}
+                          error={profileErrFor("phone", profilePhoneErr)}
                         />
                       </div>
 
@@ -264,8 +273,8 @@ const Settings = () => {
 
                       <div className="flex justify-end pt-2">
                         <Button
-                          disabled={!profileDirty || saveMutation.isPending}
-                          onClick={() => saveMutation.mutate()}
+                          disabled={!profileDirty || !!profileEmailErr || !!profilePhoneErr || saveMutation.isPending}
+                          onClick={() => { setProfileTouched({ email: true, phone: true }); if (!profileEmailErr && !profilePhoneErr) saveMutation.mutate(); }}
                         >
                           {saveMutation.isPending ? "Saving…" : "Save Changes"}
                         </Button>

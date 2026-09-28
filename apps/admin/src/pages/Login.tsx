@@ -6,6 +6,7 @@ import { Label } from "@jollify/shared/components/ui/label";
 import { Checkbox } from "@jollify/shared/components/ui/checkbox";
 import { Eye, EyeOff, ArrowRight, Shield } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { emailError } from "@jollify/shared/lib/validation";
 
 const MEMBER_APP_URL = import.meta.env.VITE_MEMBER_APP_URL ?? "https://member.jollify.app";
 
@@ -19,6 +20,8 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const emailErr = emailError(form.email);
+    if (emailErr) { setError(emailErr); return; }
     setError(null);
     setLoading(true);
     const { error } = await signIn(form.email, form.password);

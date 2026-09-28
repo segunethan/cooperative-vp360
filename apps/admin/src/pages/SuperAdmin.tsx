@@ -8,6 +8,7 @@ import { Button } from "@jollify/shared/components/ui/button";
 import { Input } from "@jollify/shared/components/ui/input";
 import { Label } from "@jollify/shared/components/ui/label";
 import { supabase } from "@jollify/shared/lib/supabase";
+import { emailError } from "@jollify/shared/lib/validation";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type AuthState = "checking" | "login" | "denied" | "dashboard";
@@ -189,6 +190,8 @@ const SuperAdmin = () => {
   // ── Login ────────────────────────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    const emailErr = emailError(email);
+    if (emailErr) { setLoginErr(emailErr); return; }
     setLoginErr(null);
     setLoginLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });

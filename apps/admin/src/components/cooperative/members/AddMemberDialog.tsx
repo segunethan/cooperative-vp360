@@ -22,6 +22,8 @@ import { UserPlus, CheckCircle2, Copy, Mail } from "lucide-react";
 import { useToast } from "@jollify/shared/hooks/use-toast";
 import { addNewMember, sendMemberInviteEmail, type NewMemberFormData } from "@jollify/shared/lib/api/members";
 import { useAuth } from "@/context/AuthContext";
+import PhoneInput from "@jollify/shared/components/PhoneInput";
+import { emailError, phoneError } from "@jollify/shared/lib/validation";
 
 interface AddMemberDialogProps {
   open: boolean;
@@ -43,6 +45,11 @@ const AddMemberDialog = ({ open, onOpenChange, tenantId, onMemberAdded }: AddMem
   const [sendingEmail, setSendingEmail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ memberNumber: string; fullName: string; email: string } | null>(null);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const emailErr = emailError(form.email);
+  const phoneErr = phoneError(form.phone);
+  const errFor = (key: string, msg: string) => (touched[key] ? msg : undefined);
 
   const set = (field: keyof NewMemberFormData) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -50,6 +57,7 @@ const AddMemberDialog = ({ open, onOpenChange, tenantId, onMemberAdded }: AddMem
 
   const handleClose = () => {
     setForm(EMPTY);
+    setTouched({});
     setError(null);
     setSuccess(null);
     onOpenChange(false);
@@ -58,6 +66,8 @@ const AddMemberDialog = ({ open, onOpenChange, tenantId, onMemberAdded }: AddMem
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tenantId) return;
+    setTouched({ email: true, phone: true });
+    if (emailErr || phoneErr) return;
     setError(null);
     setLoading(true);
 
@@ -194,11 +204,18 @@ const AddMemberDialog = ({ open, onOpenChange, tenantId, onMemberAdded }: AddMem
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="email">Email Address *</Label>
-              <Input id="email" type="email" placeholder="john@example.com" required value={form.email} onChange={set("email")} />
+              <Input id="email" type="email" placeholder="john@example.com" required value={form.email} onChange={set("email")} onBlur={() => setTouched((t) => ({ ...t, email: true }))} />
+              {errFor("email", emailErr) && <p className="text-xs text-red-600">{errFor("email", emailErr)}</p>}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="phone">Phone Number *</Label>
-              <Input id="phone" placeholder="+234 801 234 5678" required value={form.phone} onChange={set("phone")} />
+              <PhoneInput
+                id="phone"
+                value={form.phone}
+                onChange={(v) => setForm((p) => ({ ...p, phone: v }))}
+                onBlur={() => setTouched((t) => ({ ...t, phone: true }))}
+                error={errFor("phone", phoneErr)}
+              />
             </div>
           </div>
 

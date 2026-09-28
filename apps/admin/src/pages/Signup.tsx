@@ -6,6 +6,8 @@ import { Label } from "@jollify/shared/components/ui/label";
 import { Eye, EyeOff, ArrowRight, Building2, RotateCcw } from "lucide-react";
 import { supabase } from "@jollify/shared/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import PhoneInput from "@jollify/shared/components/PhoneInput";
+import { emailError, phoneError } from "@jollify/shared/lib/validation";
 
 type Step = "form" | "verify-otp";
 
@@ -28,6 +30,10 @@ const Signup = () => {
     phone: "",
     password: "",
   });
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const emailErr = emailError(form.email);
+  const phoneErr = phoneError(form.phone, 11, false);
+  const errFor = (key: string, msg: string) => (touched[key] ? msg : undefined);
 
   const slugify = (name: string) =>
     name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -73,6 +79,8 @@ const Signup = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setTouched({ email: true, phone: true });
+    if (emailErr || phoneErr) return;
     setError(null);
     setLoading(true);
     try {
@@ -355,8 +363,10 @@ const Signup = () => {
                 autoComplete="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
+                onBlur={() => setTouched((t) => ({ ...t, email: true }))}
                 className="h-10"
               />
+              {errFor("email", emailErr) && <p className="text-xs text-red-600">{errFor("email", emailErr)}</p>}
             </div>
 
             <div className="space-y-1.5">
@@ -364,13 +374,12 @@ const Signup = () => {
                 Phone number{" "}
                 <span className="text-muted-foreground font-normal">(optional)</span>
               </Label>
-              <Input
+              <PhoneInput
                 id="phone"
-                type="tel"
-                placeholder="+234 800 000 0000"
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                className="h-10"
+                onChange={(v) => setForm({ ...form, phone: v })}
+                onBlur={() => setTouched((t) => ({ ...t, phone: true }))}
+                error={errFor("phone", phoneErr)}
               />
             </div>
 

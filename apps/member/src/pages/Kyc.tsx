@@ -8,13 +8,15 @@ import { formatMoneyFull, nairaToKobo, generatePaymentReference } from "@jollify
 import { supabase } from "@jollify/shared/lib/supabase";
 import { useQuery } from "@tanstack/react-query";
 import Stepper from "@jollify/shared/components/Stepper";
+import PhoneInput from "@jollify/shared/components/PhoneInput";
+import { phoneError } from "@jollify/shared/lib/validation";
 
 const STEPS = ["Identity & Bank Details", "Declarations & Next of Kin", "Entrance Fee & Thrift", "Review & Sign"];
 
 const EMPTY_FORM: KycFormData = {
   bankName: "", accountNumber: "", accountName: "", bvn: "", nin: "",
   secretQuestion: "", secretAnswer: "",
-  idType: "NIN", idNumber: "", idExpiryDate: "", idDocumentUrl: undefined,
+  idType: "PASSPORT", idNumber: "", idExpiryDate: "", idDocumentUrl: undefined,
   notInOtherSociety: false, existingDebtDeclaration: "",
   nextOfKinName: "", nextOfKinRelationship: "", nextOfKinPhone: "", nextOfKinAddress: "",
   monthlyThriftKobo: undefined, entranceFeeKobo: undefined, entranceFeeReceiptUrl: undefined, entranceFeePaidDate: undefined,
@@ -27,6 +29,10 @@ const idTypeLabel: Record<KycIdType, string> = {
   DRIVERS_LICENSE: "Driver's License",
   VOTERS_CARD: "Voter's Card",
 };
+
+// NIN is already collected as its own dedicated field above, so it's excluded
+// here to avoid asking for the same document twice under two different labels.
+const SELECTABLE_ID_TYPES: KycIdType[] = ["PASSPORT", "DRIVERS_LICENSE", "VOTERS_CARD"];
 
 const Field = ({
   label, value, onChange, placeholder, type = "text", autoComplete, error, required = true,
@@ -158,7 +164,7 @@ const Kyc = () => {
       notInOtherSociety: form.notInOtherSociety ? "" : "You must confirm this to continue",
       nextOfKinName: form.nextOfKinName ? "" : "Required",
       nextOfKinRelationship: form.nextOfKinRelationship ? "" : "Required",
-      nextOfKinPhone: form.nextOfKinPhone ? "" : "Required",
+      nextOfKinPhone: phoneError(form.nextOfKinPhone),
       nextOfKinAddress: form.nextOfKinAddress ? "" : "Required",
     },
     2: {
@@ -321,7 +327,7 @@ const Kyc = () => {
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">ID Type *</label>
               <select value={form.idType} onChange={(e) => set("idType")(e.target.value as KycIdType)} className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm">
-                {(Object.keys(idTypeLabel) as KycIdType[]).map((t) => <option key={t} value={t}>{idTypeLabel[t]}</option>)}
+                {SELECTABLE_ID_TYPES.map((t) => <option key={t} value={t}>{idTypeLabel[t]}</option>)}
               </select>
             </div>
             <Field label="ID Number" value={form.idNumber} onChange={set("idNumber")} placeholder="Document number" error={errFor("idNumber")} />
@@ -344,9 +350,20 @@ const Kyc = () => {
 
         {step === 1 && (
           <>
+            <div className="p-3 rounded-lg border border-border bg-muted/30 space-y-1.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Membership Declaration</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                As a cooperative society, membership is built on mutual trust, shared responsibility, and the principle of
+                members working together for their common economic and social benefit. By proceeding, you declare that you
+                are joining this cooperative voluntarily; that you will honour your monthly thrift savings commitment and
+                any contributions you subscribe to; that you understand the entrance fee is non-refundable once your
+                membership is approved; and that you agree to be bound by the cooperative's bye-laws, resolutions passed at
+                general meetings, and the lawful decisions of its elected officers and management committee.
+              </p>
+            </div>
             <label className="flex items-start gap-2.5 p-3 rounded-lg border border-border cursor-pointer">
               <input type="checkbox" checked={form.notInOtherSociety} onChange={(e) => set("notInOtherSociety")(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-input" />
-              <span className="text-sm text-foreground">I confirm I do not belong to another cooperative society with identical objectives.</span>
+              <span className="text-sm text-foreground">I confirm I do not belong to another cooperative society with identical objectives, and I accept the membership declaration above.</span>
             </label>
             {errFor("notInOtherSociety") && <p className="text-xs text-red-600">{errFor("notInOtherSociety")}</p>}
 
@@ -362,7 +379,10 @@ const Kyc = () => {
             <div className="pt-2 border-t border-border" />
             <Field label="Next of Kin — Full Name" value={form.nextOfKinName} onChange={set("nextOfKinName")} placeholder="Next of kin's full name" autoComplete="name" error={errFor("nextOfKinName")} />
             <Field label="Relationship" value={form.nextOfKinRelationship} onChange={set("nextOfKinRelationship")} placeholder="e.g. Spouse, Sibling, Parent" error={errFor("nextOfKinRelationship")} />
-            <Field label="Phone Number" value={form.nextOfKinPhone} onChange={set("nextOfKinPhone")} placeholder="e.g. 08012345678" type="tel" autoComplete="tel" error={errFor("nextOfKinPhone")} />
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground">Phone Number *</label>
+              <PhoneInput value={form.nextOfKinPhone} onChange={set("nextOfKinPhone")} size="lg" error={errFor("nextOfKinPhone")} />
+            </div>
             <Field label="Address" value={form.nextOfKinAddress} onChange={set("nextOfKinAddress")} placeholder="Full residential address" autoComplete="street-address" error={errFor("nextOfKinAddress")} />
           </>
         )}
@@ -434,7 +454,14 @@ const Kyc = () => {
 
             <div className="pt-2 border-t border-border space-y-3">
               <Field label="Type your full name to sign" value={form.signatureName} onChange={set("signatureName")} placeholder="Your full legal name" error={errFor("signatureName")} />
-              <p className="text-xs text-muted-foreground">By typing your name above and submitting, you hereby endorse your entry into the Membership Register and confirm the information provided is accurate.</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                By typing your name above and submitting, you hereby endorse your entry into the Membership Register of
+                this cooperative society, in accordance with its bye-laws and applicable cooperative societies law. You
+                confirm that all information provided in this form is true and accurate to the best of your knowledge,
+                and you understand that false or misleading information may be grounds for rejecting or terminating your
+                membership. You further acknowledge your ongoing obligations as a member in good standing, including your
+                thrift savings commitment and, where applicable, the non-refundable entrance fee.
+              </p>
             </div>
           </div>
         )}

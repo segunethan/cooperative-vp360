@@ -12,6 +12,8 @@ import { fetchOwnKyb, submitKyb, type KybFormData } from "@jollify/shared/lib/ap
 import { formatMoneyFull, nairaToKobo, generatePaymentReference } from "@jollify/shared/lib/money";
 import { supabase } from "@jollify/shared/lib/supabase";
 import { useAuth } from "@/context/AuthContext";
+import PhoneInput from "@jollify/shared/components/PhoneInput";
+import { phoneError } from "@jollify/shared/lib/validation";
 
 const STEPS = ["Business Details", "Fees & Settlement Account", "Compliance & Declaration"];
 
@@ -78,7 +80,7 @@ const Kyb = () => {
       name: form.name.trim() ? "" : "Required",
       rcNumber: form.rcNumber.trim() ? "" : "Required",
       address: form.address.trim() ? "" : "Required",
-      phone: form.phone.trim() ? "" : "Required",
+      phone: phoneError(form.phone),
     },
     1: {
       bankAccountInfo: form.bankAccountInfo.trim() ? "" : "Required — where members will pay their entrance fee",
@@ -221,8 +223,7 @@ const Kyb = () => {
               </div>
               <div className="space-y-1.5">
                 <Label>Phone Number *</Label>
-                <Input type="tel" placeholder="+234 800 000 0000" value={form.phone} onChange={(e) => set("phone")(e.target.value)} />
-                {errFor("phone") && <p className="text-xs text-red-600">{errFor("phone")}</p>}
+                <PhoneInput value={form.phone} onChange={(v) => set("phone")(v)} error={errFor("phone")} />
               </div>
             </>
           )}

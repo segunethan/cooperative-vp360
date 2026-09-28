@@ -14,6 +14,8 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { fetchTenantPublicInfo, submitMemberApplication } from "@jollify/shared/lib/api/applications";
 import { CheckCircle2, Building2 } from "lucide-react";
+import PhoneInput from "@jollify/shared/components/PhoneInput";
+import { emailError, phoneError } from "@jollify/shared/lib/validation";
 
 const EMPTY_FORM = {
   firstName: "", lastName: "", email: "", phone: "",
@@ -23,9 +25,15 @@ const EMPTY_FORM = {
 const Apply = () => {
   const { slug } = useParams<{ slug: string }>();
   const [form, setForm] = useState(EMPTY_FORM);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [consented, setConsented] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  const emailErr = emailError(form.email);
+  const phoneErr = phoneError(form.phone);
+  const errFor = (key: string, msg: string) => (touched[key] ? msg : undefined);
 
   const { data: tenant, isLoading, error: tenantError } = useQuery({
     queryKey: ["tenant-public-info", slug],
@@ -41,6 +49,8 @@ const Apply = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tenant) return;
+    setTouched({ email: true, phone: true });
+    if (emailErr || phoneErr || !consented) return;
     setError(null);
     setLoading(true);
     try {
@@ -120,11 +130,18 @@ const Apply = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="email">Email Address *</Label>
-                  <Input id="email" type="email" required autoComplete="email" value={form.email} onChange={set("email")} className="h-10" />
+                  <Input id="email" type="email" required autoComplete="email" value={form.email} onChange={set("email")} onBlur={() => setTouched((t) => ({ ...t, email: true }))} className="h-10" />
+                  {errFor("email", emailErr) && <p className="text-xs text-red-600">{errFor("email", emailErr)}</p>}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="phone">Phone Number *</Label>
-                  <Input id="phone" type="tel" placeholder="+234 801 234 5678" required autoComplete="tel" value={form.phone} onChange={set("phone")} className="h-10" />
+                  <PhoneInput
+                    id="phone"
+                    value={form.phone}
+                    onChange={(v) => setForm((p) => ({ ...p, phone: v }))}
+                    onBlur={() => setTouched((t) => ({ ...t, phone: true }))}
+                    error={errFor("phone", phoneErr)}
+                  />
                 </div>
               </div>
 
@@ -155,7 +172,18 @@ const Apply = () => {
                 <Input id="occupation" placeholder="Software Engineer, Teacher, etc." value={form.occupation} onChange={set("occupation")} className="h-10" />
               </div>
 
-              <Button type="submit" className="w-full h-10 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold" disabled={loading}>
+              <label className="flex items-start gap-2.5 p-3 rounded-lg border border-border cursor-pointer">
+                <input type="checkbox" checked={consented} onChange={(e) => setConsented(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-input" />
+                <span className="text-xs text-muted-foreground">
+                  I consent to {tenant.name} and Jollify collecting and processing the personal information above to review my
+                  application for cooperative membership, in line with the cooperative's bye-laws and applicable data
+                  protection regulations. I understand that membership is subject to the cooperative's approval and,
+                  where applicable, payment of a non-refundable entrance fee, and that my information will not be
+                  shared outside the cooperative's membership review process without my consent.
+                </span>
+              </label>
+
+              <Button type="submit" className="w-full h-10 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold" disabled={loading || !consented}>
                 {loading ? "Submitting…" : "Submit Application"}
               </Button>
             </form>

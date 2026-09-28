@@ -5,6 +5,7 @@ import { Input } from "@jollify/shared/components/ui/input";
 import { Label } from "@jollify/shared/components/ui/label";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { emailError } from "@jollify/shared/lib/validation";
 
 const ADMIN_APP_URL = import.meta.env.VITE_ADMIN_APP_URL ?? "https://admin.jollify.app";
 
@@ -18,6 +19,8 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const emailErr = emailError(form.email);
+    if (emailErr) { setError(emailErr); return; }
     setError(null);
     setLoading(true);
     const { error } = await signIn(form.email, form.password);
