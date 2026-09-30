@@ -14,6 +14,7 @@ export interface LoanApplicationRow {
   purpose: string;
   status: string;
   appliedDate: string;
+  loanTypeName: string;
 }
 
 export interface ActiveLoanRow extends LoanApplicationRow {
@@ -24,6 +25,7 @@ export interface ActiveLoanRow extends LoanApplicationRow {
 export interface SubmitLoanApplicationData {
   tenantId: string;
   memberNumber: string;
+  loanTypeId: string;
   principalNaira: number;
   interestRatePercent: number;
   tenureMonths: number;
@@ -44,6 +46,7 @@ const bpsToPercent = (bps: number) => bps / 100;
 
 const toApplicationRow = (row: Record<string, unknown>): LoanApplicationRow => {
   const m = row.member as { member_number: string; full_name: string } | null;
+  const lt = row.loan_type as { name: string } | null;
   return {
     id: row.id as string,
     loanNumber: row.loan_number as string,
@@ -58,6 +61,7 @@ const toApplicationRow = (row: Record<string, unknown>): LoanApplicationRow => {
     appliedDate: new Date(row.created_at as string).toLocaleDateString("en-GB", {
       day: "numeric", month: "short", year: "numeric",
     }),
+    loanTypeName: lt?.name ?? "Custom",
   };
 };
 
@@ -66,7 +70,7 @@ const toApplicationRow = (row: Record<string, unknown>): LoanApplicationRow => {
 export const fetchPendingLoanApplications = async (): Promise<LoanApplicationRow[]> => {
   const { data, error } = await supabase
     .from("loans")
-    .select(`id, loan_number, principal_kobo, interest_rate_bps, tenure_months, purpose, status, created_at, member:members(member_number, full_name)`)
+    .select(`id, loan_number, principal_kobo, interest_rate_bps, tenure_months, purpose, status, created_at, member:members(member_number, full_name), loan_type:loan_types(name)`)
     .in("status", ["PENDING", "APPROVED"])
     .order("created_at", { ascending: false });
   if (error) handleSupabaseError(error);
@@ -76,7 +80,7 @@ export const fetchPendingLoanApplications = async (): Promise<LoanApplicationRow
 export const fetchActiveLoans = async (): Promise<ActiveLoanRow[]> => {
   const { data, error } = await supabase
     .from("loans")
-    .select(`id, loan_number, principal_kobo, interest_rate_bps, tenure_months, purpose, status, due_date, disbursed_at, created_at, member:members(member_number, full_name)`)
+    .select(`id, loan_number, principal_kobo, interest_rate_bps, tenure_months, purpose, status, due_date, disbursed_at, created_at, member:members(member_number, full_name), loan_type:loan_types(name)`)
     .eq("status", "ACTIVE")
     .order("due_date", { ascending: true });
   if (error) handleSupabaseError(error);
@@ -112,10 +116,15 @@ export const submitLoanApplication = async (data: SubmitLoanApplicationData): Pr
   if (memberError) throw new NotFoundError("Member", data.memberNumber);
 
   // loan_number is assigned by the assign_loan_number_trigger in the DB —
-  // no client-side count needed, no race condition.
+  // no client-side count needed, no race condition. interest_rate_bps and
+  // tenure_months below are enforced server-side from loan_type_id by
+  // trg_apply_loan_type_terms, regardless of what's sent here — they're
+  // still computed client-side purely so the UI can show an accurate
+  // estimate before submitting.
   const { error } = await supabase.from("loans").insert({
     tenant_id: data.tenantId,
     member_id: memberRow.id,
+    loan_type_id: data.loanTypeId,
     principal_kobo: nairaToKobo(data.principalNaira),
     interest_rate_bps: Math.round(data.interestRatePercent * 100),
     tenure_months: data.tenureMonths,
@@ -270,6 +279,83 @@ export const recordLoanRepayment = async (
     p_reference: generatePaymentReference("REPAY"),
   });
   if (error) handleSupabaseError(error);
+};
+
+// ── Member-submitted repayment requests ────────────────────────────────────
+// Mirrors requestLoanTopup/reviewLoanTopup below: a member reports a
+// repayment they made, an admin reviews it, and approval posts the actual
+// repayment through record_loan_repayment() — the same function the admin's
+// own "Record Repayment" dialog already uses.
+
+export const requestLoanRepayment = async (params: {
+  tenantId: string;
+  loanId: string;
+  memberId: string;
+  amountKobo: number;
+  channel: string;
+  paidAt: string; // yyyy-mm-dd
+  notes?: string;
+}): Promise<void> => {
+  const { error } = await supabase.from("loan_repayment_requests").insert({
+    tenant_id: params.tenantId,
+    loan_id: params.loanId,
+    member_id: params.memberId,
+    amount_kobo: params.amountKobo,
+    channel: params.channel,
+    paid_at: params.paidAt,
+    notes: params.notes ?? null,
+  });
+  if (error) handleSupabaseError(error);
+};
+
+export interface PendingRepaymentRequestRow {
+  id: string;
+  loanNumber: string;
+  memberName: string;
+  amountKobo: number;
+  channel: string;
+  paidAt: string;
+  requestedAt: string;
+}
+
+export const fetchPendingLoanRepaymentRequests = async (): Promise<PendingRepaymentRequestRow[]> => {
+  const { data, error } = await supabase
+    .from("loan_repayment_requests")
+    .select("id, amount_kobo, channel, paid_at, requested_at, loans(loan_number), members(full_name)")
+    .eq("status", "PENDING")
+    .order("requested_at", { ascending: true });
+  if (error) handleSupabaseError(error);
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    loanNumber: (r.loans as unknown as { loan_number: string } | null)?.loan_number ?? "—",
+    memberName: (r.members as unknown as { full_name: string } | null)?.full_name ?? "—",
+    amountKobo: r.amount_kobo,
+    channel: r.channel,
+    paidAt: r.paid_at,
+    requestedAt: r.requested_at,
+  }));
+};
+
+export const reviewLoanRepaymentRequest = async (requestId: string, approve: boolean, reviewerId: string): Promise<void> => {
+  const { error } = await supabase.rpc("review_loan_repayment_request", {
+    p_request_id: requestId,
+    p_approve: approve,
+    p_reviewer: reviewerId,
+  });
+  if (error) handleSupabaseError(error);
+};
+
+// Member's own pending requests for a given loan, so LoanDetail.tsx can show
+// "awaiting review" instead of leaving the member wondering what happened.
+export const fetchOwnPendingRepaymentRequests = async (loanId: string): Promise<{ id: string; amountKobo: number; paidAt: string }[]> => {
+  const { data, error } = await supabase
+    .from("loan_repayment_requests")
+    .select("id, amount_kobo, paid_at")
+    .eq("loan_id", loanId)
+    .eq("status", "PENDING")
+    .order("requested_at", { ascending: false });
+  if (error) handleSupabaseError(error);
+  return (data ?? []).map((r) => ({ id: r.id, amountKobo: r.amount_kobo, paidAt: r.paid_at }));
 };
 
 export const requestLoanTopup = async (params: {

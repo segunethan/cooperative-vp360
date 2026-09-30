@@ -3,6 +3,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@jollify/shared/components/ui/dialog";
 import {
   Table,
@@ -13,15 +14,17 @@ import {
   TableRow,
 } from "@jollify/shared/components/ui/table";
 import { Badge } from "@jollify/shared/components/ui/badge";
+import { Button } from "@jollify/shared/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { fetchLoanLedger } from "@jollify/shared/lib/api/loans";
 import { formatMoneyFull } from "@jollify/shared/lib/money";
-import { History } from "lucide-react";
+import { History, Banknote } from "lucide-react";
 
 interface Props {
   loanId: string | null;
   loanNumber: string;
   onClose: () => void;
+  onRecordRepayment?: () => void;
 }
 
 const typeLabel: Record<string, string> = {
@@ -36,7 +39,7 @@ const typeColor: Record<string, string> = {
   TOPUP: "bg-amber-50 text-amber-700 border-amber-200",
 };
 
-const LoanLedgerDialog = ({ loanId, loanNumber, onClose }: Props) => {
+const LoanLedgerDialog = ({ loanId, loanNumber, onClose, onRecordRepayment }: Props) => {
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["loan-ledger", loanId],
     queryFn: () => fetchLoanLedger(loanId as string),
@@ -91,6 +94,15 @@ const LoanLedgerDialog = ({ loanId, loanNumber, onClose }: Props) => {
             </TableBody>
           </Table>
         </div>
+
+        {onRecordRepayment && (
+          <DialogFooter>
+            <Button variant="outline" onClick={onRecordRepayment}>
+              <Banknote className="h-4 w-4 mr-2" />
+              Record Repayment
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

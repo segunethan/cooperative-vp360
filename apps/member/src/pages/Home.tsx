@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { PiggyBank, TrendingUp, CreditCard, BadgeCheck, Plus, X, ShieldAlert, ChevronRight, LogOut } from "lucide-react";
+import { PiggyBank, TrendingUp, CreditCard, BadgeCheck, Plus, X, ShieldAlert, ChevronRight, LogOut, Megaphone } from "lucide-react";
 import { supabase } from "@jollify/shared/lib/supabase";
 import { formatMoneyFull, nairaToKobo, generatePaymentReference } from "@jollify/shared/lib/money";
 import { fetchMemberSubscriptions } from "@jollify/shared/lib/api/products";
 import { notifyRequestSubmitted } from "@jollify/shared/lib/api/products";
+import { fetchMemberAnnouncements } from "@jollify/shared/lib/api/announcements";
 import { fetchOwnKyc, type KycSubmission } from "@jollify/shared/lib/api/kyc";
 import { useAuth } from "@/context/AuthContext";
 import { useMemberProfile } from "@/hooks/useMemberProfile";
@@ -53,6 +54,13 @@ const Home = () => {
     queryFn: () => fetchMemberSubscriptions(profile!.memberId),
     enabled: !!profile,
   });
+
+  const { data: announcements = [] } = useQuery({
+    queryKey: ["member-announcements", profile?.tenantId],
+    queryFn: () => fetchMemberAnnouncements(3),
+    enabled: !!profile,
+  });
+  const latestAnnouncement = announcements.find((a) => a.audience !== "active" || profile?.status === "ACTIVE") ?? null;
 
   const { data: kyc } = useQuery<KycSubmission | null>({
     queryKey: ["own-kyc", profile?.memberId],
@@ -250,6 +258,23 @@ const Home = () => {
           <p className="text-2xl font-bold text-foreground tracking-tight">View</p>
         </Link>
       </div>
+
+      {/* Announcements preview */}
+      {latestAnnouncement && (
+        <Link
+          to="/member/announcements"
+          className="flex items-center gap-3 bg-white rounded-xl border border-border p-4 hover:border-primary/40 transition-colors"
+        >
+          <div className="w-9 h-9 rounded-lg bg-primary/8 flex items-center justify-center flex-shrink-0">
+            <Megaphone className="h-4 w-4 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground truncate">{latestAnnouncement.title}</p>
+            <p className="text-xs text-muted-foreground truncate">{latestAnnouncement.content}</p>
+          </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        </Link>
+      )}
 
       {/* Contributions */}
       <div className="bg-white rounded-xl border border-border overflow-hidden">

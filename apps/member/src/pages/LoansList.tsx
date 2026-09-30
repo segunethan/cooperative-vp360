@@ -4,19 +4,14 @@ import { CreditCard, Plus, X, ChevronRight } from "lucide-react";
 import { supabase } from "@jollify/shared/lib/supabase";
 import { formatMoneyFull } from "@jollify/shared/lib/money";
 import { submitLoanApplication } from "@jollify/shared/lib/api/loans";
+import { fetchActiveLoanTypes, type LoanType } from "@jollify/shared/lib/api/loanTypes";
 import { notifyRequestSubmitted } from "@jollify/shared/lib/api/products";
 import { useMemberProfile } from "@/hooks/useMemberProfile";
 import { useKycGate } from "@/hooks/useKycGate";
 
-const LOAN_PRODUCTS = [
-  { label: "Personal Loan — 12% p.a., up to 24 months", rate: 12, maxMonths: 24 },
-  { label: "Emergency Loan — 8% p.a., up to 12 months", rate: 8, maxMonths: 12 },
-  { label: "Business Loan — 15% p.a., up to 36 months", rate: 15, maxMonths: 36 },
-];
-
 const LOAN_PURPOSES = ["Business Expansion", "Education", "Medical / Emergency", "Home Improvement", "Agriculture", "Other"];
 
-const EMPTY_LOAN = { productIndex: "", principalNaira: "", tenure: "", purpose: "", notes: "" };
+const EMPTY_LOAN = { loanTypeId: "", principalNaira: "", purpose: "", notes: "" };
 
 interface LoanRow {
   id: string;
@@ -38,6 +33,7 @@ const LoansList = () => {
   const { requireKyc } = useKycGate();
   const [loans, setLoans] = useState<LoanRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loanTypes, setLoanTypes] = useState<LoanType[]>([]);
 
   const [loanOpen, setLoanOpen] = useState(false);
   const [loanForm, setLoanForm] = useState(EMPTY_LOAN);
@@ -67,29 +63,29 @@ const LoansList = () => {
   };
 
   useEffect(() => { loadLoans(); }, [profile?.memberId]);
+  useEffect(() => { fetchActiveLoanTypes().then(setLoanTypes).catch(() => setLoanTypes([])); }, []);
 
-  const selectedProduct = loanForm.productIndex !== "" ? LOAN_PRODUCTS[parseInt(loanForm.productIndex, 10)] : null;
-  const tenure = loanForm.tenure ? parseInt(loanForm.tenure, 10) : selectedProduct?.maxMonths ?? 0;
+  const selectedLoanType = loanForm.loanTypeId ? loanTypes.find((t) => t.id === loanForm.loanTypeId) ?? null : null;
+  const tenure = selectedLoanType?.tenureMonths ?? 0;
   const principal = parseFloat(loanForm.principalNaira) || 0;
-  const showRepayment = selectedProduct && principal > 0 && tenure > 0;
-  const r = selectedProduct ? selectedProduct.rate / 100 / 12 : 0;
+  const showRepayment = selectedLoanType && principal > 0 && tenure > 0;
+  const r = selectedLoanType ? selectedLoanType.interestRatePercent / 100 / 12 : 0;
   const monthly = showRepayment ? (r === 0 ? principal / tenure : (principal * r * Math.pow(1 + r, tenure)) / (Math.pow(1 + r, tenure) - 1)) : 0;
 
   const handleSubmitLoan = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoanError(null);
     if (!profile) return;
-    const idx = parseInt(loanForm.productIndex, 10);
-    const product = isNaN(idx) ? null : LOAN_PRODUCTS[idx];
     if (!loanForm.principalNaira || parseFloat(loanForm.principalNaira) <= 0) { setLoanError("Enter a valid loan amount"); return; }
-    if (!product) { setLoanError("Select a loan product"); return; }
-    const t = loanForm.tenure ? parseInt(loanForm.tenure, 10) : product.maxMonths;
-    if (t > product.maxMonths) { setLoanError(`Max tenure for this product is ${product.maxMonths} months`); return; }
+    if (!selectedLoanType) { setLoanError("Select a loan type"); return; }
     setLoanLoading(true);
     try {
       await submitLoanApplication({
         tenantId: profile.tenantId, memberNumber: profile.memberNumber,
-        principalNaira: parseFloat(loanForm.principalNaira), interestRatePercent: product.rate, tenureMonths: t,
+        loanTypeId: selectedLoanType.id,
+        principalNaira: parseFloat(loanForm.principalNaira),
+        interestRatePercent: selectedLoanType.interestRatePercent,
+        tenureMonths: selectedLoanType.tenureMonths,
         purpose: loanForm.purpose || undefined, notes: loanForm.notes || undefined,
       });
       await notifyRequestSubmitted({
@@ -172,19 +168,20 @@ const LoansList = () => {
               {loanError && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">{loanError}</div>}
 
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Loan Product *</label>
+                <label className="text-sm font-medium text-foreground">Loan Type *</label>
                 <select
-                  value={loanForm.productIndex}
-                  onChange={(e) => {
-                    const idx = e.target.value;
-                    const p = LOAN_PRODUCTS[parseInt(idx, 10)];
-                    setLoanForm({ ...loanForm, productIndex: idx, tenure: p ? String(p.maxMonths) : "" });
-                  }}
+                  value={loanForm.loanTypeId}
+                  onChange={(e) => setLoanForm({ ...loanForm, loanTypeId: e.target.value })}
                   className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 >
-                  <option value="">Select a product</option>
-                  {LOAN_PRODUCTS.map((p, i) => <option key={i} value={String(i)}>{p.label}</option>)}
+                  <option value="">Select a loan type</option>
+                  {loanTypes.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} — {t.interestRatePercent}% p.a., {t.tenureMonths} months</option>
+                  ))}
                 </select>
+                {loanTypes.length === 0 && (
+                  <p className="text-xs text-muted-foreground">Your cooperative hasn't configured any loan types yet.</p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -193,8 +190,8 @@ const LoansList = () => {
                   <input type="number" min="1000" placeholder="e.g. 200000" value={loanForm.principalNaira} onChange={(e) => setLoanForm({ ...loanForm, principalNaira: e.target.value })} className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Tenure (months)</label>
-                  <input type="number" min="1" max={selectedProduct?.maxMonths ?? 60} placeholder={selectedProduct ? String(selectedProduct.maxMonths) : "e.g. 12"} value={loanForm.tenure} onChange={(e) => setLoanForm({ ...loanForm, tenure: e.target.value })} className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm" />
+                  <label className="text-sm font-medium text-foreground">Tenure</label>
+                  <input type="text" readOnly value={selectedLoanType ? `${selectedLoanType.tenureMonths} months` : "—"} className="w-full h-11 px-3 rounded-lg border border-input bg-muted/50 text-sm text-muted-foreground" />
                 </div>
               </div>
 
@@ -221,7 +218,7 @@ const LoansList = () => {
 
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => { setLoanOpen(false); setLoanForm(EMPTY_LOAN); setLoanError(null); }} className="flex-1 h-11 rounded-lg border border-border text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
-                <button type="submit" disabled={loanLoading || !loanForm.productIndex || !loanForm.principalNaira} className="flex-1 h-11 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
+                <button type="submit" disabled={loanLoading || !loanForm.loanTypeId || !loanForm.principalNaira} className="flex-1 h-11 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
                   {loanLoading ? (<><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Submitting…</>) : "Submit Application"}
                 </button>
               </div>

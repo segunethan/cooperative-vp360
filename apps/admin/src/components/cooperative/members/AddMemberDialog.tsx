@@ -30,14 +30,16 @@ interface AddMemberDialogProps {
   onOpenChange: (open: boolean) => void;
   tenantId: string;
   onMemberAdded: () => void;
+  payrollEnabled?: boolean;
 }
 
 const EMPTY: NewMemberFormData = {
   firstName: "", lastName: "", email: "", phone: "",
   gender: "", dateOfBirth: "", address: "", occupation: "",
+  employerName: "", staffId: "", deductionMethod: "CASH", recurringContributionNaira: "",
 };
 
-const AddMemberDialog = ({ open, onOpenChange, tenantId, onMemberAdded }: AddMemberDialogProps) => {
+const AddMemberDialog = ({ open, onOpenChange, tenantId, onMemberAdded, payrollEnabled = false }: AddMemberDialogProps) => {
   const { toast } = useToast();
   const { tenant } = useAuth();
   const [form, setForm] = useState<NewMemberFormData>(EMPTY);
@@ -251,6 +253,48 @@ const AddMemberDialog = ({ open, onOpenChange, tenantId, onMemberAdded }: AddMem
             <Label htmlFor="occupation">Occupation</Label>
             <Input id="occupation" placeholder="Software Engineer, Teacher, etc." value={form.occupation} onChange={set("occupation")} />
           </div>
+
+          {payrollEnabled && (
+            <div className="space-y-4 pt-2 border-t border-border">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground pt-2">
+                Payroll &amp; Deductions
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="employerName">Employer</Label>
+                  <Input id="employerName" placeholder="Company name" value={form.employerName} onChange={set("employerName")} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="staffId">Staff ID</Label>
+                  <Input id="staffId" placeholder="e.g. STF-0042" value={form.staffId} onChange={set("staffId")} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="deductionMethod">Deduction Method</Label>
+                  <Select
+                    value={form.deductionMethod}
+                    onValueChange={(v) => setForm((p) => ({ ...p, deductionMethod: v as NewMemberFormData["deductionMethod"] }))}
+                  >
+                    <SelectTrigger id="deductionMethod"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CASH">Cash</SelectItem>
+                      <SelectItem value="BANK_TRANSFER">Bank Transfer</SelectItem>
+                      <SelectItem value="PAYROLL">Payroll</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="recurringAmount">Recurring Contribution (₦)</Label>
+                  <Input
+                    id="recurringAmount" type="number" min={0} placeholder="e.g. 10000"
+                    value={form.recurringContributionNaira}
+                    onChange={set("recurringContributionNaira")}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={handleClose} disabled={loading}>

@@ -18,6 +18,8 @@ import LoansList from "./pages/LoansList";
 import LoanDetail from "./pages/LoanDetail";
 import Kyc from "./pages/Kyc";
 import Profile from "./pages/Profile";
+import Statement from "./pages/Statement";
+import Announcements from "./pages/Announcements";
 
 const queryClient = new QueryClient();
 
@@ -49,6 +51,8 @@ const App = () => (
               <Route path="loans/:id" element={<LoanDetail />} />
               <Route path="kyc" element={<Kyc />} />
               <Route path="profile" element={<Profile />} />
+              <Route path="statement" element={<Statement />} />
+              <Route path="announcements" element={<Announcements />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

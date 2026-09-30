@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { BadgeCheck, ShieldAlert, ChevronRight, LogOut } from "lucide-react";
+import { BadgeCheck, ShieldAlert, ChevronRight, LogOut, FileText, Megaphone } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useMemberProfile } from "@/hooks/useMemberProfile";
 
@@ -31,6 +31,24 @@ const Profile = () => {
           <p className="text-sm font-medium text-foreground">{profile.cooperativeName}</p>
         </div>
       </div>
+
+      <Link to="/member/statement" className="flex items-center gap-3 bg-white rounded-xl border border-border p-4 hover:border-primary/40 transition-colors">
+        <FileText className="h-5 w-5 text-primary flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground">My Statement</p>
+          <p className="text-xs text-muted-foreground">Contributions, loans and repayment history</p>
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+      </Link>
+
+      <Link to="/member/announcements" className="flex items-center gap-3 bg-white rounded-xl border border-border p-4 hover:border-primary/40 transition-colors">
+        <Megaphone className="h-5 w-5 text-primary flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground">Announcements</p>
+          <p className="text-xs text-muted-foreground">Updates from your cooperative</p>
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+      </Link>
 
       <Link to="/member/kyc" className="flex items-center gap-3 bg-white rounded-xl border border-border p-4 hover:border-primary/40 transition-colors">
         {profile.kycVerified ? (

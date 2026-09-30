@@ -16,6 +16,7 @@ import {
   exitMember,
   sendMemberInviteEmail,
 } from "@jollify/shared/lib/api/members";
+import { fetchPayrollSettings } from "@jollify/shared/lib/api/settings";
 import { useState } from "react";
 import { useKybGate } from "@/hooks/useKybGate";
 
@@ -30,6 +31,12 @@ const Members = () => {
   const [bulkOpen, setBulkOpen] = useState(false);
 
   // ── Data ──────────────────────────────────────────────────────────────────
+  const { data: payrollSettings } = useQuery({
+    queryKey: ["payroll-settings", tenant?.id],
+    queryFn: () => fetchPayrollSettings(tenant!.id),
+    enabled: !!tenant?.id,
+  });
+
   const { data: members = [], isLoading } = useQuery({
     queryKey: ["members"],
     queryFn: fetchAllMembers,
@@ -151,6 +158,7 @@ const Members = () => {
         onOpenChange={setAddOpen}
         tenantId={tenant?.id ?? ""}
         onMemberAdded={invalidateMembers}
+        payrollEnabled={payrollSettings?.payrollEnabled ?? false}
       />
       <BulkImportDialog open={bulkOpen} onOpenChange={setBulkOpen} onImported={invalidateMembers} />
     </div>

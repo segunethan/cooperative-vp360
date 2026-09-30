@@ -1,10 +1,16 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, CreditCard, ArrowUpCircle } from "lucide-react";
+import { ArrowLeft, CreditCard, ArrowUpCircle, Banknote, Clock } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@jollify/shared/lib/supabase";
 import { formatMoneyFull, nairaToKobo } from "@jollify/shared/lib/money";
-import { fetchLoanLedger, requestLoanTopup, type LoanLedgerRow } from "@jollify/shared/lib/api/loans";
+import {
+  fetchLoanLedger,
+  requestLoanTopup,
+  requestLoanRepayment,
+  fetchOwnPendingRepaymentRequests,
+  type LoanLedgerRow,
+} from "@jollify/shared/lib/api/loans";
 import { notifyRequestSubmitted } from "@jollify/shared/lib/api/products";
 import { useMemberProfile } from "@/hooks/useMemberProfile";
 import { useKycGate } from "@/hooks/useKycGate";
@@ -28,6 +34,13 @@ const LoanDetail = () => {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const [repayOpen, setRepayOpen] = useState(false);
+  const [repayAmount, setRepayAmount] = useState("");
+  const [repayChannel, setRepayChannel] = useState("bank_transfer");
+  const [repayDate, setRepayDate] = useState(new Date().toISOString().split("T")[0]);
+  const [repayError, setRepayError] = useState<string | null>(null);
+  const [repaySubmitting, setRepaySubmitting] = useState(false);
+
   const { data: loan, isLoading: loadingLoan } = useQuery({
     queryKey: ["loan-summary", id],
     queryFn: () => fetchLoanSummary(id!),
@@ -37,6 +50,12 @@ const LoanDetail = () => {
   const { data: ledger = [], isLoading: loadingLedger } = useQuery<LoanLedgerRow[]>({
     queryKey: ["loan-ledger", id],
     queryFn: () => fetchLoanLedger(id!),
+    enabled: !!id,
+  });
+
+  const { data: pendingRepayments = [] } = useQuery({
+    queryKey: ["loan-pending-repayments", id],
+    queryFn: () => fetchOwnPendingRepaymentRequests(id!),
     enabled: !!id,
   });
 
@@ -59,6 +78,31 @@ const LoanDetail = () => {
       setError((err as Error).message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleRecordRepayment = async () => {
+    if (!profile || !id) return;
+    setRepayError(null);
+    const naira = parseFloat(repayAmount);
+    if (!naira || naira <= 0) { setRepayError("Enter a valid amount"); return; }
+    setRepaySubmitting(true);
+    try {
+      await requestLoanRepayment({
+        tenantId: profile.tenantId, loanId: id, memberId: profile.memberId,
+        amountKobo: nairaToKobo(naira), channel: repayChannel, paidAt: repayDate,
+      });
+      await notifyRequestSubmitted({
+        tenantId: profile.tenantId, memberName: profile.fullName, cooperativeName: profile.cooperativeName,
+        requestLabel: `${loan?.loan_number} repayment`, amountLabel: formatMoneyFull(nairaToKobo(naira)),
+      });
+      queryClient.invalidateQueries({ queryKey: ["loan-pending-repayments", id] });
+      setRepayOpen(false);
+      setRepayAmount("");
+    } catch (err) {
+      setRepayError((err as Error).message);
+    } finally {
+      setRepaySubmitting(false);
     }
   };
 
@@ -116,24 +160,66 @@ const LoanDetail = () => {
         </div>
       </div>
 
+      {pendingRepayments.length > 0 && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 space-y-1.5">
+          <p className="text-sm font-semibold text-amber-800 flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5" /> Awaiting admin review
+          </p>
+          {pendingRepayments.map((r) => (
+            <p key={r.id} className="text-xs text-amber-700">
+              {formatMoneyFull(r.amountKobo)} paid on {new Date(r.paidAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+            </p>
+          ))}
+        </div>
+      )}
+
       {loan.status === "ACTIVE" && (
-        topupOpen ? (
-          <div className="space-y-3 bg-white rounded-xl border border-border p-4">
-            {error && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">{error}</div>}
-            <p className="text-sm font-medium text-foreground">Request a top-up</p>
-            <input type="number" min={1} placeholder="Amount (₦)" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
-            <div className="flex gap-2">
-              <button onClick={() => { setTopupOpen(false); setAmount(""); setError(null); }} className="flex-1 h-11 rounded-lg border border-border text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
-              <button onClick={handleTopup} disabled={submitting} className="flex-1 h-11 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-60">
-                {submitting ? "Submitting…" : "Submit Request"}
-              </button>
+        <div className="space-y-2">
+          {repayOpen ? (
+            <div className="space-y-3 bg-white rounded-xl border border-border p-4">
+              {repayError && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">{repayError}</div>}
+              <p className="text-sm font-medium text-foreground">Record a repayment</p>
+              <input type="number" min={1} placeholder="Amount paid (₦)" value={repayAmount} onChange={(e) => setRepayAmount(e.target.value)} className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+              <div className="grid grid-cols-2 gap-2">
+                <select value={repayChannel} onChange={(e) => setRepayChannel(e.target.value)} className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm">
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="cash">Cash</option>
+                  <option value="mobile_money">Mobile Money</option>
+                </select>
+                <input type="date" max={new Date().toISOString().split("T")[0]} value={repayDate} onChange={(e) => setRepayDate(e.target.value)} className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm" />
+              </div>
+              <p className="text-xs text-muted-foreground">Your cooperative admin will review this and post it to your loan.</p>
+              <div className="flex gap-2">
+                <button onClick={() => { setRepayOpen(false); setRepayAmount(""); setRepayError(null); }} className="flex-1 h-11 rounded-lg border border-border text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
+                <button onClick={handleRecordRepayment} disabled={repaySubmitting} className="flex-1 h-11 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-60">
+                  {repaySubmitting ? "Submitting…" : "Submit"}
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <button onClick={() => requireKyc() && setTopupOpen(true)} className="w-full h-11 rounded-lg border border-border text-sm font-medium hover:bg-muted/50 transition-colors flex items-center justify-center gap-1.5">
-            <ArrowUpCircle className="h-3.5 w-3.5" /> Request Top-up
-          </button>
-        )
+          ) : (
+            <button onClick={() => requireKyc() && setRepayOpen(true)} className="w-full h-11 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5">
+              <Banknote className="h-3.5 w-3.5" /> Record a Repayment
+            </button>
+          )}
+
+          {topupOpen ? (
+            <div className="space-y-3 bg-white rounded-xl border border-border p-4">
+              {error && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">{error}</div>}
+              <p className="text-sm font-medium text-foreground">Request a top-up</p>
+              <input type="number" min={1} placeholder="Amount (₦)" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
+              <div className="flex gap-2">
+                <button onClick={() => { setTopupOpen(false); setAmount(""); setError(null); }} className="flex-1 h-11 rounded-lg border border-border text-sm font-medium hover:bg-muted/50 transition-colors">Cancel</button>
+                <button onClick={handleTopup} disabled={submitting} className="flex-1 h-11 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-60">
+                  {submitting ? "Submitting…" : "Submit Request"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => requireKyc() && setTopupOpen(true)} className="w-full h-11 rounded-lg border border-border text-sm font-medium hover:bg-muted/50 transition-colors flex items-center justify-center gap-1.5">
+              <ArrowUpCircle className="h-3.5 w-3.5" /> Request Top-up
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

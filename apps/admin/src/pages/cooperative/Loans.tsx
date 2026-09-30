@@ -20,6 +20,8 @@ import {
   Download,
   Landmark,
   Banknote,
+  Pencil,
+  Archive,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -27,15 +29,20 @@ import {
   fetchActiveLoans,
   approveLoanApplication,
   rejectLoanApplication,
+  disburseLoanToMember,
   fetchPendingLoanTopups,
   reviewLoanTopup,
+  fetchPendingLoanRepaymentRequests,
+  reviewLoanRepaymentRequest,
 } from "@jollify/shared/lib/api/loans";
+import { fetchAllLoanTypes, archiveLoanType, type LoanType } from "@jollify/shared/lib/api/loanTypes";
 import { formatMoney, formatMoneyFull } from "@jollify/shared/lib/money";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import LoanApplicationDialog from "@/components/cooperative/loans/LoanApplicationDialog";
 import LoanLedgerDialog from "@/components/cooperative/loans/LoanLedgerDialog";
 import RecordRepaymentDialog from "@/components/cooperative/loans/RecordRepaymentDialog";
+import LoanTypeFormDialog from "@/components/cooperative/loans/LoanTypeFormDialog";
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -62,11 +69,27 @@ const SkeletonRow = ({ cols }: { cols: number }) => (
 );
 
 const Loans = () => {
-  const { user } = useAuth();
+  const { user, tenant } = useAuth();
   const queryClient = useQueryClient();
   const [newLoanOpen, setNewLoanOpen] = useState(false);
-  const [ledgerLoan, setLedgerLoan] = useState<{ id: string; loanNumber: string } | null>(null);
+  const [ledgerLoan, setLedgerLoan] = useState<{ id: string; loanNumber: string; allowRepayment: boolean } | null>(null);
   const [repaymentLoan, setRepaymentLoan] = useState<{ id: string; loanNumber: string } | null>(null);
+  const [loanTypeDialogOpen, setLoanTypeDialogOpen] = useState(false);
+  const [editingLoanType, setEditingLoanType] = useState<LoanType | null>(null);
+
+  const { data: loanTypes = [], isLoading: loadingLoanTypes } = useQuery({
+    queryKey: ["loan-types"],
+    queryFn: fetchAllLoanTypes,
+  });
+
+  const archiveLoanTypeMutation = useMutation({
+    mutationFn: (id: string) => archiveLoanType(id),
+    onSuccess: () => {
+      toast.success("Loan type archived.");
+      queryClient.invalidateQueries({ queryKey: ["loan-types"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const { data: applications = [], isLoading: loadingApplications } = useQuery({
     queryKey: ["loan-applications"],
@@ -83,6 +106,11 @@ const Loans = () => {
     queryFn: fetchPendingLoanTopups,
   });
 
+  const { data: repaymentRequests = [], isLoading: loadingRepaymentRequests } = useQuery({
+    queryKey: ["loan-repayment-requests"],
+    queryFn: fetchPendingLoanRepaymentRequests,
+  });
+
   const invalidateLoans = () => {
     queryClient.invalidateQueries({ queryKey: ["loan-applications"] });
     queryClient.invalidateQueries({ queryKey: ["active-loans"] });
@@ -94,6 +122,18 @@ const Loans = () => {
     onSuccess: (_, { approve }) => {
       toast.success(approve ? "Top-up approved." : "Top-up rejected.");
       queryClient.invalidateQueries({ queryKey: ["loan-topup-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["loan-ledger"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const repaymentRequestMutation = useMutation({
+    mutationFn: ({ requestId, approve }: { requestId: string; approve: boolean }) =>
+      reviewLoanRepaymentRequest(requestId, approve, user?.id ?? ""),
+    onSuccess: (_, { approve }) => {
+      toast.success(approve ? "Repayment approved and posted." : "Repayment request rejected.");
+      queryClient.invalidateQueries({ queryKey: ["loan-repayment-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["active-loans"] });
       queryClient.invalidateQueries({ queryKey: ["loan-ledger"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -113,6 +153,15 @@ const Loans = () => {
     mutationFn: ({ loanId }: { loanId: string }) => rejectLoanApplication(loanId),
     onSuccess: () => {
       toast.success("Loan application rejected.");
+      invalidateLoans();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const disburseMutation = useMutation({
+    mutationFn: ({ loanId }: { loanId: string }) => disburseLoanToMember(loanId),
+    onSuccess: () => {
+      toast.success("Loan disbursed — it's now active and will appear under Active Loans.");
       invalidateLoans();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -223,6 +272,15 @@ const Loans = () => {
                   </span>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="repayment-requests">
+                Repayment Requests
+                {repaymentRequests.length > 0 && (
+                  <span className="ml-2 bg-warning text-warning-foreground text-xs px-1.5 py-0.5 rounded-full">
+                    {repaymentRequests.length}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="loan-types">Loan Types</TabsTrigger>
             </TabsList>
 
             {/* ── Applications Tab ── */}
@@ -242,6 +300,7 @@ const Loans = () => {
                       <TableRow>
                         <TableHead>Application ID</TableHead>
                         <TableHead>Member</TableHead>
+                        <TableHead>Loan Type</TableHead>
                         <TableHead>Amount</TableHead>
                         <TableHead>Purpose</TableHead>
                         <TableHead>Status</TableHead>
@@ -251,10 +310,10 @@ const Loans = () => {
                     </TableHeader>
                     <TableBody>
                       {loadingApplications ? (
-                        Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={7} />)
+                        Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={8} />)
                       ) : applications.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7}>
+                          <TableCell colSpan={8}>
                             <div className="flex flex-col items-center py-10 text-center text-muted-foreground">
                               <Landmark className="h-10 w-10 mb-3 opacity-30" />
                               <p className="font-medium">No loan applications yet</p>
@@ -272,6 +331,7 @@ const Loans = () => {
                                 <p className="text-sm text-muted-foreground">{app.memberNumber}</p>
                               </div>
                             </TableCell>
+                            <TableCell className="text-sm">{app.loanTypeName}</TableCell>
                             <TableCell className="font-medium">{app.principalAmount}</TableCell>
                             <TableCell>{app.purpose || "—"}</TableCell>
                             <TableCell>
@@ -304,8 +364,25 @@ const Loans = () => {
                                     </Button>
                                   </>
                                 )}
+                                {app.status === "Approved" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-success hover:text-success"
+                                    disabled={disburseMutation.isPending}
+                                    onClick={() => disburseMutation.mutate({ loanId: app.id })}
+                                  >
+                                    Disburse
+                                  </Button>
+                                )}
                                 {app.status !== "Pending Review" && (
-                                  <Button variant="ghost" size="sm">View</Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setLedgerLoan({ id: app.id, loanNumber: app.loanNumber, allowRepayment: false })}
+                                  >
+                                    View
+                                  </Button>
                                 )}
                               </div>
                             </TableCell>
@@ -372,7 +449,7 @@ const Loans = () => {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => setLedgerLoan({ id: loan.id, loanNumber: loan.loanNumber })}
+                                  onClick={() => setLedgerLoan({ id: loan.id, loanNumber: loan.loanNumber, allowRepayment: true })}
                                 >
                                   History
                                 </Button>
@@ -455,9 +532,160 @@ const Loans = () => {
                 </div>
               </div>
             </TabsContent>
+
+            {/* ── Repayment Requests Tab ── */}
+            <TabsContent value="repayment-requests">
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-medium">Member-Submitted Repayments</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Members reporting a repayment they made — approving posts it to the loan ledger immediately.
+                  </p>
+                </div>
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Loan</TableHead>
+                        <TableHead>Member</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead>Channel</TableHead>
+                        <TableHead>Date Paid</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loadingRepaymentRequests ? (
+                        Array.from({ length: 3 }).map((_, i) => <SkeletonRow key={i} cols={6} />)
+                      ) : repaymentRequests.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6}>
+                            <div className="flex flex-col items-center py-10 text-center text-muted-foreground">
+                              <Banknote className="h-10 w-10 mb-3 opacity-30" />
+                              <p className="font-medium">No pending repayment requests</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        repaymentRequests.map((r) => (
+                          <TableRow key={r.id}>
+                            <TableCell className="font-mono text-sm">{r.loanNumber}</TableCell>
+                            <TableCell>{r.memberName}</TableCell>
+                            <TableCell className="text-right font-medium">{formatMoneyFull(r.amountKobo)}</TableCell>
+                            <TableCell className="capitalize">{r.channel.replace("_", " ")}</TableCell>
+                            <TableCell>{new Date(r.paidAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost" size="sm" className="text-success hover:text-success"
+                                  disabled={repaymentRequestMutation.isPending}
+                                  onClick={() => repaymentRequestMutation.mutate({ requestId: r.id, approve: true })}
+                                >
+                                  Approve
+                                </Button>
+                                <Button
+                                  variant="ghost" size="sm" className="text-destructive hover:text-destructive"
+                                  disabled={repaymentRequestMutation.isPending}
+                                  onClick={() => repaymentRequestMutation.mutate({ requestId: r.id, approve: false })}
+                                >
+                                  Reject
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* ── Loan Types Tab ── */}
+            <TabsContent value="loan-types">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium">Loan Types</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Members can only apply for the loan types configured here — name, interest rate and tenure are fixed per type.
+                    </p>
+                  </div>
+                  <Button size="sm" onClick={() => { setEditingLoanType(null); setLoanTypeDialogOpen(true); }}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Loan Type
+                  </Button>
+                </div>
+
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Interest Rate</TableHead>
+                        <TableHead>Tenure</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loadingLoanTypes ? (
+                        Array.from({ length: 3 }).map((_, i) => <SkeletonRow key={i} cols={5} />)
+                      ) : loanTypes.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5}>
+                            <div className="flex flex-col items-center py-10 text-center text-muted-foreground">
+                              <Landmark className="h-10 w-10 mb-3 opacity-30" />
+                              <p className="font-medium">No loan types configured yet</p>
+                              <p className="text-sm">e.g. Fixed Term Loan, Loan Against Contribution, Emergency Loan.</p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        loanTypes.map((lt) => (
+                          <TableRow key={lt.id}>
+                            <TableCell>
+                              <p className="font-medium">{lt.name}</p>
+                              {lt.description && <p className="text-xs text-muted-foreground line-clamp-1">{lt.description}</p>}
+                            </TableCell>
+                            <TableCell>{lt.interestRatePercent}% p.a.</TableCell>
+                            <TableCell>{lt.tenureMonths} months</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={lt.status === "ACTIVE" ? "bg-success/10 text-success border-success/20" : "bg-muted/10 text-muted-foreground border-border"}>
+                                {lt.status === "ACTIVE" ? "Active" : "Archived"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right space-x-1">
+                              <Button variant="ghost" size="sm" onClick={() => { setEditingLoanType(lt); setLoanTypeDialogOpen(true); }}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              {lt.status === "ACTIVE" && (
+                                <Button
+                                  variant="ghost" size="sm" className="text-muted-foreground"
+                                  disabled={archiveLoanTypeMutation.isPending}
+                                  onClick={() => archiveLoanTypeMutation.mutate(lt.id)}
+                                >
+                                  <Archive className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
+      <LoanTypeFormDialog
+        open={loanTypeDialogOpen}
+        tenantId={tenant?.id ?? ""}
+        loanType={editingLoanType}
+        onClose={() => setLoanTypeDialogOpen(false)}
+      />
       <LoanApplicationDialog
         open={newLoanOpen}
         onClose={() => setNewLoanOpen(false)}
@@ -467,6 +695,14 @@ const Loans = () => {
         loanId={ledgerLoan?.id ?? null}
         loanNumber={ledgerLoan?.loanNumber ?? ""}
         onClose={() => setLedgerLoan(null)}
+        onRecordRepayment={
+          ledgerLoan?.allowRepayment
+            ? () => {
+                setRepaymentLoan({ id: ledgerLoan.id, loanNumber: ledgerLoan.loanNumber });
+                setLedgerLoan(null);
+              }
+            : undefined
+        }
       />
       <RecordRepaymentDialog
         loanId={repaymentLoan?.id ?? null}

@@ -101,6 +101,40 @@ export const saveAnnouncementAsDraft = async (
   if (error) handleSupabaseError(error);
 };
 
+// ── Member-facing read ──────────────────────────────────────────────────────
+
+export interface MemberAnnouncement {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  audience: string;
+  publishedAt: string;
+}
+
+// RLS (announcements_member_select) already scopes this to the member's own
+// tenant; we additionally filter to PUBLISHED here since a member should
+// never see a draft.
+export const fetchMemberAnnouncements = async (limit = 20): Promise<MemberAnnouncement[]> => {
+  const { data, error } = await supabase
+    .from("announcements")
+    .select("id, title, content, category, published_at, audience")
+    .eq("status", "PUBLISHED")
+    .order("published_at", { ascending: false })
+    .limit(limit);
+
+  if (error) handleSupabaseError(error);
+
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    title: row.title as string,
+    content: row.content as string,
+    category: ((row.category as string) ?? "general").toUpperCase(),
+    audience: (row.audience as string) ?? "all",
+    publishedAt: row.published_at as string,
+  }));
+};
+
 export const deleteAnnouncementDraft = async (announcementId: string): Promise<void> => {
   const { error } = await supabase
     .from("announcements")

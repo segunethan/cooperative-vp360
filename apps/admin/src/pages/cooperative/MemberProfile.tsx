@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@jollify/shared/components/ui/card";
 import { Button } from "@jollify/shared/components/ui/button";
@@ -25,6 +26,8 @@ import {
   Calendar,
   AlertCircle,
   FileCheck,
+  ListChecks,
+  CircleAlert,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -33,7 +36,111 @@ import {
   fetchMemberLoanHistory,
 } from "@jollify/shared/lib/api/members";
 import { fetchOwnKyc } from "@jollify/shared/lib/api/kyc";
+import { fetchMemberLedger, type MemberDueRow } from "@jollify/shared/lib/api/ledger";
+import { formatMoneyFull } from "@jollify/shared/lib/money";
 import KycDetails from "@/components/cooperative/kyc/KycDetails";
+
+const dueStatusColor = (s: string) =>
+  s === "FULFILLED" ? "bg-success/10 text-success border-success/20"
+  : s === "PARTIAL" ? "bg-warning/10 text-warning border-warning/20"
+  : s === "WAIVED" ? "bg-muted/10 text-muted-foreground border-border"
+  : "bg-destructive/10 text-destructive border-destructive/20"; // OPEN past its cycle = a gap
+
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+const MemberDuesLedger = ({ memberId }: { memberId: string }) => {
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [dues, setDues] = useState<MemberDueRow[]>([]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["member-dues-ledger", memberId, cursor],
+    queryFn: () => fetchMemberLedger(memberId, cursor),
+    enabled: !!memberId,
+  });
+
+  // Keyset pagination returns one page per cursor — accumulate pages here so
+  // "Load more" appends instead of replacing what's already on screen.
+  useEffect(() => {
+    if (!data) return;
+    setDues((prev) => (cursor ? [...prev, ...data.dues] : data.dues));
+  }, [data, cursor]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Payroll & Dues Ledger</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Expected vs. actual per cycle, across every deduction method — a red "Open" badge on a past cycle is a gap.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="border rounded-lg">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Period</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Method</TableHead>
+                <TableHead>Expected</TableHead>
+                <TableHead>Fulfilled</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading && dues.length === 0 ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 6 }).map((_, j) => (
+                      <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : dues.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6}>
+                    <div className="flex flex-col items-center py-8 text-center text-muted-foreground">
+                      <ListChecks className="h-8 w-8 mb-2 opacity-30" />
+                      <p className="text-sm">No dues generated for this member yet.</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                dues.map((d) => (
+                  <TableRow key={d.id}>
+                    <TableCell>{MONTH_NAMES[d.period_month - 1]} {d.period_year}</TableCell>
+                    <TableCell>{d.due_type === "CONTRIBUTION" ? "Contribution" : "Loan Installment"}</TableCell>
+                    <TableCell className="capitalize">{d.deduction_method.toLowerCase().replace("_", " ")}</TableCell>
+                    <TableCell>{formatMoneyFull(d.amount_due_kobo)}</TableCell>
+                    <TableCell>{d.fulfilled_amount_kobo > 0 ? formatMoneyFull(d.fulfilled_amount_kobo) : "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={dueStatusColor(d.status)}>
+                        {d.status === "OPEN" ? (
+                          <span className="flex items-center gap-1"><CircleAlert className="h-3 w-3" />Open</span>
+                        ) : d.status}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+        {data?.nextCursor && (
+          <div className="flex justify-center pt-4">
+            <Button
+              variant="outline" size="sm"
+              onClick={() => setCursor(data.nextCursor!)}
+            >
+              Load more
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
 const statusColors: Record<string, string> = {
   Active:   "bg-success/10 text-success border-success/20",
@@ -176,6 +283,7 @@ const MemberProfile = () => {
           <TabsTrigger value="kyc"><FileCheck className="h-4 w-4 mr-1" />KYC & Onboarding</TabsTrigger>
           <TabsTrigger value="contributions"><CreditCard className="h-4 w-4 mr-1" />Contributions</TabsTrigger>
           <TabsTrigger value="loans"><Landmark className="h-4 w-4 mr-1" />Loans</TabsTrigger>
+          <TabsTrigger value="dues-ledger"><ListChecks className="h-4 w-4 mr-1" />Payroll Ledger</TabsTrigger>
         </TabsList>
 
         {/* ── Personal Info ── */}
@@ -346,6 +454,10 @@ const MemberProfile = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="dues-ledger">
+          {profile?.id && <MemberDuesLedger memberId={profile.id} />}
         </TabsContent>
       </Tabs>
     </div>

@@ -31,6 +31,7 @@ import {
   AlertCircle,
   Crown,
   UserPlus,
+  Wallet,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -39,7 +40,9 @@ import {
   updateCooperativeProfile,
   updateTenantUserRole,
   updateMembershipSettings,
+  updatePayrollSettings,
 } from "@jollify/shared/lib/api/settings";
+import { Switch } from "@jollify/shared/components/ui/switch";
 import { nairaToKobo, formatMoneyFull } from "@jollify/shared/lib/money";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
@@ -138,6 +141,25 @@ const Settings = () => {
       queryClient.invalidateQueries({ queryKey: ["cooperative-profile", tenantId] });
     },
     onError: (e: Error) => toast.error(e.message),
+  });
+
+  // ── Payroll & Deductions ──────────────────────────────────────────────────────
+  const [payrollEnabled, setPayrollEnabled] = useState(false);
+
+  useEffect(() => {
+    if (profile) setPayrollEnabled(profile.payrollEnabled);
+  }, [profile]);
+
+  const payrollSettingsMutation = useMutation({
+    mutationFn: (enabled: boolean) => updatePayrollSettings(tenantId, { payrollEnabled: enabled }),
+    onSuccess: (_data, enabled) => {
+      toast.success(enabled ? "Payroll deductions enabled." : "Payroll deductions disabled.");
+      queryClient.invalidateQueries({ queryKey: ["cooperative-profile", tenantId] });
+    },
+    onError: (e: Error) => {
+      toast.error(e.message);
+      if (profile) setPayrollEnabled(profile.payrollEnabled);
+    },
   });
 
   // ── Team Members ─────────────────────────────────────────────────────────────
@@ -322,6 +344,35 @@ const Settings = () => {
                     <Button size="sm" disabled={!membershipSettingsDirty || membershipSettingsMutation.isPending} onClick={() => membershipSettingsMutation.mutate()}>
                       {membershipSettingsMutation.isPending ? "Saving…" : "Save Membership Settings"}
                     </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4" />
+                    Payroll &amp; Deductions
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <Label>Enable payroll deductions</Label>
+                      <p className="text-xs text-muted-foreground">
+                        For staff cooperatives whose members have contributions and loan repayments deducted directly
+                        from salary. When on, members can be set to "Payroll" deduction and you can generate a
+                        per-cycle report for HR under Payroll Deductions.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={payrollEnabled}
+                      disabled={payrollSettingsMutation.isPending}
+                      onCheckedChange={(checked) => {
+                        setPayrollEnabled(checked);
+                        payrollSettingsMutation.mutate(checked);
+                      }}
+                    />
                   </div>
                 </CardContent>
               </Card>

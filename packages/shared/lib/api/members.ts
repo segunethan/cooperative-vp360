@@ -24,6 +24,10 @@ export interface NewMemberFormData {
   dateOfBirth?: string;
   address?: string;
   occupation?: string;
+  employerName?: string;
+  staffId?: string;
+  deductionMethod?: "CASH" | "BANK_TRANSFER" | "PAYROLL";
+  recurringContributionNaira?: string;
 }
 
 export interface MemberProfile {
@@ -310,6 +314,12 @@ export const addNewMember = async (
       date_of_birth: data.dateOfBirth ?? null,
       address: data.address ?? null,
       occupation: data.occupation ?? null,
+      employer_name: data.employerName?.trim() || null,
+      staff_id: data.staffId?.trim() || null,
+      deduction_method: data.deductionMethod ?? "CASH",
+      recurring_contribution_amount_kobo: data.recurringContributionNaira
+        ? Math.round(parseFloat(data.recurringContributionNaira) * 100)
+        : null,
       status: "INVITED",
     })
     .select("member_number, full_name, email")

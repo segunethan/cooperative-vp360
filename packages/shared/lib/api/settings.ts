@@ -16,6 +16,7 @@ export interface CooperativeProfile {
   trialEndsAt: string | null;
   entranceFeeKobo: number | null;
   bankAccountInfo: string | null;
+  payrollEnabled: boolean;
 }
 
 export interface UpdateCooperativeProfileData {
@@ -58,6 +59,7 @@ export const fetchCooperativeProfile = async (tenantId: string): Promise<Coopera
     trialEndsAt: data!.trial_ends_at ?? null,
     entranceFeeKobo: data!.entrance_fee_kobo ?? null,
     bankAccountInfo: data!.bank_account_info ?? null,
+    payrollEnabled: data!.payroll_enabled ?? false,
   };
 };
 
@@ -137,4 +139,25 @@ export const fetchMembershipSettings = async (tenantId: string): Promise<Members
     entranceFeeKobo: data?.entrance_fee_kobo ?? null,
     bankAccountInfo: data?.bank_account_info ?? null,
   };
+};
+
+export interface PayrollSettings {
+  payrollEnabled: boolean;
+}
+
+export const fetchPayrollSettings = async (tenantId: string): Promise<PayrollSettings> => {
+  const { data, error } = await supabase.from("tenants").select("payroll_enabled").eq("id", tenantId).maybeSingle();
+  if (error) handleSupabaseError(error);
+  return { payrollEnabled: data?.payroll_enabled ?? false };
+};
+
+export const updatePayrollSettings = async (
+  tenantId: string,
+  data: { payrollEnabled: boolean }
+): Promise<void> => {
+  const { error } = await supabase
+    .from("tenants")
+    .update({ payroll_enabled: data.payrollEnabled, updated_at: new Date().toISOString() })
+    .eq("id", tenantId);
+  if (error) handleSupabaseError(error);
 };

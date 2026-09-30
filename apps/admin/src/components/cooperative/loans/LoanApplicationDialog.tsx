@@ -20,24 +20,15 @@ import {
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchActiveMembers } from "@jollify/shared/lib/api/members";
 import { submitLoanApplication } from "@jollify/shared/lib/api/loans";
+import { fetchActiveLoanTypes } from "@jollify/shared/lib/api/loanTypes";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import { Landmark, AlertCircle } from "lucide-react";
 
-// Preset loan product configurations
-const LOAN_PRODUCTS = [
-  { label: "Personal Loan — 12% / 24mo max", rate: 12, maxMonths: 24 },
-  { label: "Emergency Loan — 8% / 12mo max", rate: 8, maxMonths: 12 },
-  { label: "Business Loan — 15% / 36mo max", rate: 15, maxMonths: 36 },
-  { label: "Custom", rate: null, maxMonths: null },
-];
-
 const EMPTY_FORM = {
   memberNumber: "",
-  productIndex: "",
+  loanTypeId: "",
   principalNaira: "",
-  interestRatePercent: "",
-  tenureMonths: "",
   purpose: "",
   notes: "",
 };
@@ -59,17 +50,28 @@ const LoanApplicationDialog = ({ open, onClose, onSubmitted }: Props) => {
     enabled: open,
   });
 
+  const { data: loanTypes = [], isLoading: loadingLoanTypes } = useQuery({
+    queryKey: ["active-loan-types"],
+    queryFn: fetchActiveLoanTypes,
+    enabled: open,
+  });
+
+  const selectedLoanType = loanTypes.find((t) => t.id === form.loanTypeId) ?? null;
+
   const submitMutation = useMutation({
-    mutationFn: () =>
-      submitLoanApplication({
+    mutationFn: () => {
+      if (!selectedLoanType) throw new Error("Select a loan type");
+      return submitLoanApplication({
         tenantId: tenant?.id ?? "",
         memberNumber: form.memberNumber,
+        loanTypeId: selectedLoanType.id,
         principalNaira: parseFloat(form.principalNaira),
-        interestRatePercent: parseFloat(form.interestRatePercent),
-        tenureMonths: parseInt(form.tenureMonths, 10),
+        interestRatePercent: selectedLoanType.interestRatePercent,
+        tenureMonths: selectedLoanType.tenureMonths,
         purpose: form.purpose || undefined,
         notes: form.notes || undefined,
-      }),
+      });
+    },
     onSuccess: () => {
       toast.success("Loan application submitted successfully.");
       setForm(EMPTY_FORM);
@@ -80,26 +82,11 @@ const LoanApplicationDialog = ({ open, onClose, onSubmitted }: Props) => {
     onError: (e: Error) => setError(e.message),
   });
 
-  const handleProductSelect = (indexStr: string) => {
-    const idx = parseInt(indexStr, 10);
-    const product = LOAN_PRODUCTS[idx];
-    setForm((f) => ({
-      ...f,
-      productIndex: indexStr,
-      interestRatePercent: product.rate !== null ? String(product.rate) : "",
-      tenureMonths: product.maxMonths !== null ? String(product.maxMonths) : "",
-    }));
-  };
-
-  const isCustom = form.productIndex === "3" || form.productIndex === "";
-
   const isValid =
     form.memberNumber &&
+    !!selectedLoanType &&
     form.principalNaira &&
-    parseFloat(form.principalNaira) > 0 &&
-    form.interestRatePercent &&
-    form.tenureMonths &&
-    parseInt(form.tenureMonths, 10) > 0;
+    parseFloat(form.principalNaira) > 0;
 
   const handleClose = () => {
     setForm(EMPTY_FORM);
@@ -147,22 +134,31 @@ const LoanApplicationDialog = ({ open, onClose, onSubmitted }: Props) => {
             </Select>
           </div>
 
-          {/* Loan Product */}
+          {/* Loan Type */}
           <div className="space-y-1.5">
-            <Label>Loan Product</Label>
-            <Select value={form.productIndex} onValueChange={handleProductSelect}>
+            <Label>Loan Type *</Label>
+            <Select
+              value={form.loanTypeId}
+              onValueChange={(v) => setForm({ ...form, loanTypeId: v })}
+              disabled={loadingLoanTypes}
+            >
               <SelectTrigger>
-                <SelectValue placeholder="Choose a product (pre-fills rate & tenure)" />
+                <SelectValue placeholder={loadingLoanTypes ? "Loading loan types…" : "Select a configured loan type"} />
               </SelectTrigger>
               <SelectContent>
-                {LOAN_PRODUCTS.map((p, i) => (
-                  <SelectItem key={i} value={String(i)}>{p.label}</SelectItem>
+                {loanTypes.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name} — {t.interestRatePercent}% p.a., {t.tenureMonths} months
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {!loadingLoanTypes && loanTypes.length === 0 && (
+              <p className="text-xs text-destructive">No loan types configured yet — add one under the "Loan Types" tab first.</p>
+            )}
           </div>
 
-          {/* Principal + Rate side-by-side */}
+          {/* Principal + Rate/Tenure (locked to the selected loan type) */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Principal Amount (₦) *</Label>
@@ -175,32 +171,13 @@ const LoanApplicationDialog = ({ open, onClose, onSubmitted }: Props) => {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Interest Rate (% p.a.) *</Label>
+              <Label>Interest Rate / Tenure</Label>
               <Input
-                type="number"
-                min={0}
-                max={100}
-                step={0.5}
-                placeholder="e.g. 12"
-                value={form.interestRatePercent}
-                disabled={!isCustom}
-                onChange={(e) => setForm({ ...form, interestRatePercent: e.target.value })}
+                readOnly
+                value={selectedLoanType ? `${selectedLoanType.interestRatePercent}% · ${selectedLoanType.tenureMonths}mo` : "—"}
+                className="bg-muted/50"
               />
             </div>
-          </div>
-
-          {/* Tenure */}
-          <div className="space-y-1.5">
-            <Label>Tenure (months) *</Label>
-            <Input
-              type="number"
-              min={1}
-              max={60}
-              placeholder="e.g. 12"
-              value={form.tenureMonths}
-              disabled={!isCustom}
-              onChange={(e) => setForm({ ...form, tenureMonths: e.target.value })}
-            />
           </div>
 
           {/* Purpose */}
@@ -241,8 +218,8 @@ const LoanApplicationDialog = ({ open, onClose, onSubmitted }: Props) => {
               <p className="font-medium text-foreground">Indicative repayment</p>
               {(() => {
                 const P = parseFloat(form.principalNaira);
-                const r = parseFloat(form.interestRatePercent) / 100 / 12;
-                const n = parseInt(form.tenureMonths, 10);
+                const r = (selectedLoanType?.interestRatePercent ?? 0) / 100 / 12;
+                const n = selectedLoanType?.tenureMonths ?? 0;
                 const monthly = r === 0 ? P / n : (P * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
                 const total = monthly * n;
                 return (
