@@ -48,6 +48,17 @@ export interface MemberProfile {
   contributionTotal: string;
   loanTotalKobo: number;
   loanTotal: string;
+  employerName: string | null;
+  staffId: string | null;
+  deductionMethod: "CASH" | "BANK_TRANSFER" | "PAYROLL";
+  recurringContributionAmountKobo: number | null;
+}
+
+export interface MemberPayrollFormData {
+  employerName?: string;
+  staffId?: string;
+  deductionMethod: "CASH" | "BANK_TRANSFER" | "PAYROLL";
+  recurringContributionNaira?: string;
 }
 
 export interface MemberContributionHistory {
@@ -197,6 +208,10 @@ export const fetchMemberProfile = async (memberNumber: string): Promise<MemberPr
     contributionTotal: formatMoneyFull(contributionTotalKobo),
     loanTotalKobo,
     loanTotal: formatMoneyFull(loanTotalKobo),
+    employerName: data.employer_name ?? null,
+    staffId: data.staff_id ?? null,
+    deductionMethod: data.deduction_method ?? "CASH",
+    recurringContributionAmountKobo: data.recurring_contribution_amount_kobo ?? null,
   };
 };
 
@@ -369,6 +384,25 @@ export const exitMember = async (memberNumber: string): Promise<void> => {
   const { error } = await supabase
     .from("members")
     .update({ status: "EXITED", updated_at: new Date().toISOString() })
+    .eq("member_number", memberNumber);
+  if (error) handleSupabaseError(error);
+};
+
+export const updateMemberPayrollInfo = async (
+  memberNumber: string,
+  data: MemberPayrollFormData
+): Promise<void> => {
+  const { error } = await supabase
+    .from("members")
+    .update({
+      employer_name: data.employerName?.trim() || null,
+      staff_id: data.staffId?.trim() || null,
+      deduction_method: data.deductionMethod,
+      recurring_contribution_amount_kobo: data.recurringContributionNaira
+        ? Math.round(parseFloat(data.recurringContributionNaira) * 100)
+        : null,
+      updated_at: new Date().toISOString(),
+    })
     .eq("member_number", memberNumber);
   if (error) handleSupabaseError(error);
 };

@@ -4,6 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@jollify/shared/compon
 import { Button } from "@jollify/shared/components/ui/button";
 import { Badge } from "@jollify/shared/components/ui/badge";
 import { Skeleton } from "@jollify/shared/components/ui/skeleton";
+import { Input } from "@jollify/shared/components/ui/input";
+import { Label } from "@jollify/shared/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@jollify/shared/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@jollify/shared/components/ui/tabs";
 import {
   Table,
@@ -28,16 +37,24 @@ import {
   FileCheck,
   ListChecks,
   CircleAlert,
+  Wallet,
+  Pencil,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchMemberProfile,
   fetchMemberContributionHistory,
   fetchMemberLoanHistory,
+  updateMemberPayrollInfo,
+  type MemberPayrollFormData,
+  type MemberProfile as MemberProfileData,
 } from "@jollify/shared/lib/api/members";
+import { fetchPayrollSettings } from "@jollify/shared/lib/api/settings";
 import { fetchOwnKyc } from "@jollify/shared/lib/api/kyc";
 import { fetchMemberLedger, type MemberDueRow } from "@jollify/shared/lib/api/ledger";
 import { formatMoneyFull } from "@jollify/shared/lib/money";
+import { useToast } from "@jollify/shared/hooks/use-toast";
+import { useAuth } from "@/context/AuthContext";
 import KycDetails from "@/components/cooperative/kyc/KycDetails";
 
 const dueStatusColor = (s: string) =>
@@ -163,15 +180,156 @@ const SkeletonCard = () => (
   <Card><CardContent className="p-4"><Skeleton className="h-10 w-full" /></CardContent></Card>
 );
 
+const deductionMethodLabel: Record<string, string> = {
+  CASH: "Cash",
+  BANK_TRANSFER: "Bank Transfer",
+  PAYROLL: "Payroll",
+};
+
+const MemberPayrollCard = ({ memberNumber, profile }: { memberNumber: string; profile: MemberProfileData }) => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<MemberPayrollFormData>({
+    employerName: profile.employerName ?? "",
+    staffId: profile.staffId ?? "",
+    deductionMethod: profile.deductionMethod,
+    recurringContributionNaira: profile.recurringContributionAmountKobo
+      ? String(profile.recurringContributionAmountKobo / 100)
+      : "",
+  });
+
+  const resetForm = () => setForm({
+    employerName: profile.employerName ?? "",
+    staffId: profile.staffId ?? "",
+    deductionMethod: profile.deductionMethod,
+    recurringContributionNaira: profile.recurringContributionAmountKobo
+      ? String(profile.recurringContributionAmountKobo / 100)
+      : "",
+  });
+
+  const mutation = useMutation({
+    mutationFn: () => updateMemberPayrollInfo(memberNumber, form),
+    onSuccess: () => {
+      toast({ title: "Payroll information updated" });
+      queryClient.invalidateQueries({ queryKey: ["member-profile", memberNumber] });
+      setEditing(false);
+    },
+    onError: (e: Error) => toast({ title: "Could not save", description: e.message, variant: "destructive" }),
+  });
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle>Payroll & Deductions</CardTitle>
+        {!editing && (
+          <Button size="sm" variant="outline" onClick={() => { resetForm(); setEditing(true); }}>
+            <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent>
+        {editing ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="pf-employer">Employer</Label>
+                <Input
+                  id="pf-employer" placeholder="Company name"
+                  value={form.employerName}
+                  onChange={(e) => setForm((p) => ({ ...p, employerName: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="pf-staffid">Staff ID</Label>
+                <Input
+                  id="pf-staffid" placeholder="e.g. STF-0042"
+                  value={form.staffId}
+                  onChange={(e) => setForm((p) => ({ ...p, staffId: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="pf-method">Deduction Method</Label>
+                <Select
+                  value={form.deductionMethod}
+                  onValueChange={(v) => setForm((p) => ({ ...p, deductionMethod: v as MemberPayrollFormData["deductionMethod"] }))}
+                >
+                  <SelectTrigger id="pf-method"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CASH">Cash</SelectItem>
+                    <SelectItem value="BANK_TRANSFER">Bank Transfer</SelectItem>
+                    <SelectItem value="PAYROLL">Payroll</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="pf-amount">Recurring Contribution (₦)</Label>
+                <Input
+                  id="pf-amount" type="number" min={0} placeholder="e.g. 10000"
+                  value={form.recurringContributionNaira}
+                  onChange={(e) => setForm((p) => ({ ...p, recurringContributionNaira: e.target.value }))}
+                />
+              </div>
+            </div>
+            {form.deductionMethod === "PAYROLL" && (
+              <p className="text-xs text-muted-foreground">
+                Dues for this cycle will only be included in a payroll batch once "Generate Dues" has been run for that period on the Payroll page.
+              </p>
+            )}
+            <div className="flex items-center gap-2 pt-1">
+              <Button size="sm" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+                {mutation.isPending ? "Saving…" : "Save"}
+              </Button>
+              <Button size="sm" variant="ghost" disabled={mutation.isPending} onClick={() => { resetForm(); setEditing(false); }}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {[
+              { icon: Briefcase, label: "Employer", value: profile.employerName || "—" },
+              { icon: User, label: "Staff ID", value: profile.staffId || "—" },
+              { icon: Wallet, label: "Deduction Method", value: deductionMethodLabel[profile.deductionMethod] },
+              {
+                icon: CreditCard,
+                label: "Recurring Contribution",
+                value: profile.recurringContributionAmountKobo ? formatMoneyFull(profile.recurringContributionAmountKobo) : "—",
+              },
+            ].map(({ icon: Icon, label, value }) => (
+              <div key={label} className="flex items-start gap-3">
+                <Icon className="h-4 w-4 text-muted-foreground mt-0.5" />
+                <div>
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <p className="text-sm font-medium text-foreground">{value}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
 const MemberProfile = () => {
   const { memberId } = useParams<{ memberId: string }>();
   const navigate = useNavigate();
+  const { tenant } = useAuth();
   const memberNumber = memberId ?? "";
 
   const { data: profile, isLoading: loadingProfile, error: profileError } = useQuery({
     queryKey: ["member-profile", memberNumber],
     queryFn: () => fetchMemberProfile(memberNumber),
     enabled: !!memberNumber,
+  });
+
+  const { data: payrollSettings } = useQuery({
+    queryKey: ["payroll-settings", tenant?.id],
+    queryFn: () => fetchPayrollSettings(tenant!.id),
+    enabled: !!tenant?.id,
   });
 
   const { data: contributions = [], isLoading: loadingContribs } = useQuery({
@@ -317,6 +475,12 @@ const MemberProfile = () => {
               )}
             </CardContent>
           </Card>
+
+          {payrollSettings?.payrollEnabled && profile && (
+            <div className="mt-6">
+              <MemberPayrollCard memberNumber={memberNumber} profile={profile} />
+            </div>
+          )}
         </TabsContent>
 
         {/* ── KYC & Onboarding ── */}
