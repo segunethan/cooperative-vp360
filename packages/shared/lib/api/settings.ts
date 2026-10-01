@@ -17,6 +17,7 @@ export interface CooperativeProfile {
   entranceFeeKobo: number | null;
   bankAccountInfo: string | null;
   payrollEnabled: boolean;
+  withdrawalsEnabled: boolean;
 }
 
 export interface UpdateCooperativeProfileData {
@@ -60,6 +61,7 @@ export const fetchCooperativeProfile = async (tenantId: string): Promise<Coopera
     entranceFeeKobo: data!.entrance_fee_kobo ?? null,
     bankAccountInfo: data!.bank_account_info ?? null,
     payrollEnabled: data!.payroll_enabled ?? false,
+    withdrawalsEnabled: data!.withdrawals_enabled ?? false,
   };
 };
 
@@ -158,6 +160,27 @@ export const updatePayrollSettings = async (
   const { error } = await supabase
     .from("tenants")
     .update({ payroll_enabled: data.payrollEnabled, updated_at: new Date().toISOString() })
+    .eq("id", tenantId);
+  if (error) handleSupabaseError(error);
+};
+
+export interface WithdrawalSettings {
+  withdrawalsEnabled: boolean;
+}
+
+export const fetchWithdrawalSettings = async (tenantId: string): Promise<WithdrawalSettings> => {
+  const { data, error } = await supabase.from("tenants").select("withdrawals_enabled").eq("id", tenantId).maybeSingle();
+  if (error) handleSupabaseError(error);
+  return { withdrawalsEnabled: data?.withdrawals_enabled ?? false };
+};
+
+export const updateWithdrawalSettings = async (
+  tenantId: string,
+  data: { withdrawalsEnabled: boolean }
+): Promise<void> => {
+  const { error } = await supabase
+    .from("tenants")
+    .update({ withdrawals_enabled: data.withdrawalsEnabled, updated_at: new Date().toISOString() })
     .eq("id", tenantId);
   if (error) handleSupabaseError(error);
 };

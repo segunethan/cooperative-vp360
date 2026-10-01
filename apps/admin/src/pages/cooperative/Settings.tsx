@@ -32,6 +32,7 @@ import {
   Crown,
   UserPlus,
   Wallet,
+  Banknote,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -41,6 +42,7 @@ import {
   updateTenantUserRole,
   updateMembershipSettings,
   updatePayrollSettings,
+  updateWithdrawalSettings,
 } from "@jollify/shared/lib/api/settings";
 import { Switch } from "@jollify/shared/components/ui/switch";
 import { nairaToKobo, formatMoneyFull } from "@jollify/shared/lib/money";
@@ -159,6 +161,25 @@ const Settings = () => {
     onError: (e: Error) => {
       toast.error(e.message);
       if (profile) setPayrollEnabled(profile.payrollEnabled);
+    },
+  });
+
+  // ── Withdrawals ───────────────────────────────────────────────────────────────
+  const [withdrawalsEnabled, setWithdrawalsEnabled] = useState(false);
+
+  useEffect(() => {
+    if (profile) setWithdrawalsEnabled(profile.withdrawalsEnabled);
+  }, [profile]);
+
+  const withdrawalSettingsMutation = useMutation({
+    mutationFn: (enabled: boolean) => updateWithdrawalSettings(tenantId, { withdrawalsEnabled: enabled }),
+    onSuccess: (_data, enabled) => {
+      toast.success(enabled ? "Contribution withdrawals enabled." : "Contribution withdrawals disabled.");
+      queryClient.invalidateQueries({ queryKey: ["cooperative-profile", tenantId] });
+    },
+    onError: (e: Error) => {
+      toast.error(e.message);
+      if (profile) setWithdrawalsEnabled(profile.withdrawalsEnabled);
     },
   });
 
@@ -371,6 +392,34 @@ const Settings = () => {
                       onCheckedChange={(checked) => {
                         setPayrollEnabled(checked);
                         payrollSettingsMutation.mutate(checked);
+                      }}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Banknote className="h-4 w-4" />
+                    Withdrawals
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <Label>Allow withdrawals from contribution balance</Label>
+                      <p className="text-xs text-muted-foreground">
+                        When on, members can request to withdraw from their contribution balance, stating an amount,
+                        a reason, and the bank account to pay into. You review each request under Withdrawals.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={withdrawalsEnabled}
+                      disabled={withdrawalSettingsMutation.isPending}
+                      onCheckedChange={(checked) => {
+                        setWithdrawalsEnabled(checked);
+                        withdrawalSettingsMutation.mutate(checked);
                       }}
                     />
                   </div>

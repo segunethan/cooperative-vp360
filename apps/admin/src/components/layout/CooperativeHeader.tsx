@@ -11,6 +11,7 @@ const routeLabels: Record<string, string> = {
   "/cooperative/loans": "Loans",
   "/cooperative/dividends": "Dividends",
   "/cooperative/payroll": "Payroll Deductions",
+  "/cooperative/withdrawals": "Withdrawals",
   "/cooperative/announcements": "Announcements",
   "/cooperative/reports": "Reports & Compliance",
   "/cooperative/settings": "Settings",

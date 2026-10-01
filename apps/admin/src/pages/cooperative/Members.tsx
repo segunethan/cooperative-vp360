@@ -114,7 +114,7 @@ const Members = () => {
   const handleApprove = (id: string) => approveMutation.mutate(id);
   const handleSuspend = (id: string) => suspendMutation.mutate(id);
   const handleExit = (id: string) => exitMutation.mutate(id);
-  const handleEdit = (id: string) => toast({ title: "Edit Member", description: `Opening editor for ${id}…` });
+  const handleEdit = (id: string) => navigate(`/cooperative/members/${id}`);
 
   const handleVerifyKYC = () => navigate("/cooperative/kyc");
   const handleResendInvite = (id: string) => resendInviteMutation.mutate(id);

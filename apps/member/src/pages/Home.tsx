@@ -1,16 +1,24 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { PiggyBank, TrendingUp, CreditCard, BadgeCheck, Plus, X, ShieldAlert, ChevronRight, LogOut, Megaphone } from "lucide-react";
+import { PiggyBank, TrendingUp, CreditCard, BadgeCheck, Plus, X, ShieldAlert, ChevronRight, LogOut, Megaphone, Banknote } from "lucide-react";
 import { supabase } from "@jollify/shared/lib/supabase";
 import { formatMoneyFull, nairaToKobo, generatePaymentReference } from "@jollify/shared/lib/money";
 import { fetchMemberSubscriptions } from "@jollify/shared/lib/api/products";
 import { notifyRequestSubmitted } from "@jollify/shared/lib/api/products";
 import { fetchMemberAnnouncements } from "@jollify/shared/lib/api/announcements";
 import { fetchOwnKyc, type KycSubmission } from "@jollify/shared/lib/api/kyc";
+import { fetchWithdrawalSettings } from "@jollify/shared/lib/api/settings";
+import { fetchBanks } from "@jollify/shared/lib/api/banks";
+import {
+  fetchMemberContributionBalance,
+  fetchOwnWithdrawalRequests,
+  requestWithdrawal,
+  type WithdrawalStatus,
+} from "@jollify/shared/lib/api/withdrawals";
 import { useAuth } from "@/context/AuthContext";
 import { useMemberProfile } from "@/hooks/useMemberProfile";
 import { useKycGate } from "@/hooks/useKycGate";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 const statusColor: Record<string, string> = {
   ACTIVE: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -27,6 +35,21 @@ const statusLabel: Record<string, string> = {
 };
 
 const EMPTY_CONTRIB = { amount: "", channel: "", paidDate: "", notes: "" };
+const EMPTY_WITHDRAW = { amount: "", reason: "", bankName: "", accountNumber: "", accountName: "" };
+
+const withdrawalStatusLabel: Record<WithdrawalStatus, string> = {
+  PENDING: "Pending Review",
+  APPROVED: "Approved — awaiting payment",
+  REJECTED: "Rejected",
+  PAID: "Paid",
+};
+
+const withdrawalStatusColor: Record<WithdrawalStatus, string> = {
+  PENDING: "bg-amber-50 text-amber-700 border-amber-200",
+  APPROVED: "bg-blue-50 text-blue-700 border-blue-200",
+  REJECTED: "bg-red-50 text-red-700 border-red-200",
+  PAID: "bg-emerald-50 text-emerald-700 border-emerald-200",
+};
 
 interface Contribution {
   date: string;
@@ -39,6 +62,7 @@ const Home = () => {
   const { signOut } = useAuth();
   const { data: profile, isLoading: loadingProfile, error: profileError } = useMemberProfile();
   const { requireKyc } = useKycGate();
+  const queryClient = useQueryClient();
 
   const [contributions, setContributions] = useState<Contribution[]>([]);
   const [loadingContribs, setLoadingContribs] = useState(true);
@@ -48,6 +72,11 @@ const Home = () => {
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [contribError, setContribError] = useState<string | null>(null);
   const [contribLoading, setContribLoading] = useState(false);
+
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawForm, setWithdrawForm] = useState(EMPTY_WITHDRAW);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
 
   const { data: subscriptions = [] } = useQuery({
     queryKey: ["member-subscriptions", profile?.memberId],
@@ -67,6 +96,31 @@ const Home = () => {
     queryFn: () => fetchOwnKyc(profile!.memberId),
     enabled: !!profile,
   });
+
+  const { data: withdrawalSettings } = useQuery({
+    queryKey: ["withdrawal-settings", profile?.tenantId],
+    queryFn: () => fetchWithdrawalSettings(profile!.tenantId),
+    enabled: !!profile,
+  });
+
+  const { data: contributionBalance } = useQuery({
+    queryKey: ["contribution-balance", profile?.memberId],
+    queryFn: () => fetchMemberContributionBalance(profile!.memberId),
+    enabled: !!profile,
+  });
+
+  const { data: banks = [] } = useQuery({
+    queryKey: ["banks"],
+    queryFn: fetchBanks,
+    enabled: !!profile && !!withdrawalSettings?.withdrawalsEnabled,
+  });
+
+  const { data: ownWithdrawals = [] } = useQuery({
+    queryKey: ["own-withdrawal-requests", profile?.memberId],
+    queryFn: () => fetchOwnWithdrawalRequests(profile!.memberId),
+    enabled: !!profile && !!withdrawalSettings?.withdrawalsEnabled,
+  });
+  const latestWithdrawal = ownWithdrawals[0] ?? null;
 
   const loadContributions = async () => {
     if (!profile) return;
@@ -92,6 +146,52 @@ const Home = () => {
 
   const contributionTotal = contributions.filter((c) => c.status === "COMPLETED").reduce((s, c) => s + c.amount, 0);
   const investmentBalance = subscriptions.filter((s) => s.status === "ACTIVE").reduce((s, sub) => s + sub.currentBalanceKobo, 0);
+
+  const openWithdraw = () => {
+    setWithdrawForm({
+      ...EMPTY_WITHDRAW,
+      bankName: kyc?.bankName ?? "",
+      accountNumber: kyc?.accountNumber ?? "",
+      accountName: kyc?.accountName ?? "",
+    });
+    setWithdrawError(null);
+    setWithdrawOpen(true);
+  };
+
+  const handleSubmitWithdraw = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWithdrawError(null);
+    if (!profile) return;
+    const amountKobo = nairaToKobo(parseFloat(withdrawForm.amount || "0"));
+    if (!withdrawForm.amount || amountKobo <= 0) { setWithdrawError("Enter a valid amount"); return; }
+    if ((contributionBalance ?? 0) > 0 && amountKobo > (contributionBalance ?? 0)) {
+      setWithdrawError(`You can withdraw up to ${formatMoneyFull(contributionBalance ?? 0)}`);
+      return;
+    }
+    if (!withdrawForm.reason.trim()) { setWithdrawError("Tell us why you're withdrawing"); return; }
+    if (!withdrawForm.bankName) { setWithdrawError("Select a bank"); return; }
+    if (!withdrawForm.accountNumber.trim() || !withdrawForm.accountName.trim()) { setWithdrawError("Enter the account number and account name"); return; }
+
+    setWithdrawLoading(true);
+    try {
+      await requestWithdrawal({
+        tenantId: profile.tenantId,
+        memberId: profile.memberId,
+        amountKobo,
+        reason: withdrawForm.reason.trim(),
+        bankName: withdrawForm.bankName,
+        accountNumber: withdrawForm.accountNumber.trim(),
+        accountName: withdrawForm.accountName.trim(),
+      });
+      setWithdrawOpen(false);
+      setWithdrawForm(EMPTY_WITHDRAW);
+      await queryClient.invalidateQueries({ queryKey: ["own-withdrawal-requests", profile.memberId] });
+    } catch (err) {
+      setWithdrawError(err instanceof Error ? err.message : "Could not submit your request");
+    } finally {
+      setWithdrawLoading(false);
+    }
+  };
 
   const handleSubmitContrib = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -211,6 +311,21 @@ const Home = () => {
         </div>
       </div>
 
+      {/* Withdrawal status banner */}
+      {withdrawalSettings?.withdrawalsEnabled && latestWithdrawal && latestWithdrawal.status !== "PAID" && (
+        <div className={`flex items-center gap-3 rounded-xl border px-4 py-3.5 ${withdrawalStatusColor[latestWithdrawal.status]}`}>
+          <Banknote className="h-5 w-5 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold">
+              Withdrawal of {formatMoneyFull(latestWithdrawal.amountKobo)} — {withdrawalStatusLabel[latestWithdrawal.status]}
+            </p>
+            {latestWithdrawal.status === "REJECTED" && latestWithdrawal.rejectionReason && (
+              <p className="text-xs opacity-80">{latestWithdrawal.rejectionReason}</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* KYC banner */}
       {kycIncomplete && (
         <Link
@@ -241,7 +356,15 @@ const Home = () => {
             <div className="w-8 h-8 rounded-lg bg-primary/8 flex items-center justify-center"><PiggyBank className="h-4 w-4 text-primary" /></div>
             <p className="text-sm text-muted-foreground font-medium">Contributions</p>
           </div>
-          <p className="text-2xl font-bold text-foreground tracking-tight">{formatMoneyFull(contributionTotal)}</p>
+          <p className="text-2xl font-bold text-foreground tracking-tight">{formatMoneyFull(contributionBalance ?? contributionTotal)}</p>
+          {withdrawalSettings?.withdrawalsEnabled && (
+            <button
+              onClick={() => requireKyc() && openWithdraw()}
+              className="mt-2 text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
+            >
+              Withdraw →
+            </button>
+          )}
         </div>
         <Link to="/member/products" className="bg-white rounded-xl border border-border p-5 hover:border-primary/40 transition-colors">
           <div className="flex items-center gap-2 mb-3">
@@ -408,6 +531,96 @@ const Home = () => {
                   className="flex-1 h-11 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
                 >
                   {contribLoading ? (<><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Submitting…</>) : "Submit Payment"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Withdraw from Contribution Dialog */}
+      {withdrawOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 sm:p-0">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setWithdrawOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Banknote className="h-5 w-5 text-primary" />
+                <h3 className="font-semibold text-foreground">Withdraw from Contribution</h3>
+              </div>
+              <button onClick={() => { setWithdrawOpen(false); setWithdrawForm(EMPTY_WITHDRAW); setWithdrawError(null); }} className="text-muted-foreground hover:text-foreground transition-colors">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitWithdraw} className="p-6 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Available balance: <span className="font-semibold text-foreground">{formatMoneyFull(contributionBalance ?? 0)}</span>
+              </p>
+
+              {withdrawError && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">{withdrawError}</div>}
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Amount (₦) *</label>
+                <input
+                  type="number" min="1" placeholder="e.g. 25000" value={withdrawForm.amount}
+                  onChange={(e) => setWithdrawForm({ ...withdrawForm, amount: e.target.value })}
+                  className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Reason *</label>
+                <input
+                  type="text" placeholder="What's this withdrawal for?" value={withdrawForm.reason}
+                  onChange={(e) => setWithdrawForm({ ...withdrawForm, reason: e.target.value })}
+                  className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Bank *</label>
+                <select
+                  value={withdrawForm.bankName} onChange={(e) => setWithdrawForm({ ...withdrawForm, bankName: e.target.value })}
+                  className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                >
+                  <option value="">Select bank</option>
+                  {banks.map((b) => <option key={b.id} value={b.name}>{b.name}</option>)}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Account Number *</label>
+                  <input
+                    type="text" placeholder="0123456789" value={withdrawForm.accountNumber}
+                    onChange={(e) => setWithdrawForm({ ...withdrawForm, accountNumber: e.target.value })}
+                    className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">Account Name *</label>
+                  <input
+                    type="text" placeholder="As it appears on the account" value={withdrawForm.accountName}
+                    onChange={(e) => setWithdrawForm({ ...withdrawForm, accountName: e.target.value })}
+                    className="w-full h-11 px-3 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setWithdrawOpen(false); setWithdrawForm(EMPTY_WITHDRAW); setWithdrawError(null); }}
+                  className="flex-1 h-11 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit" disabled={withdrawLoading}
+                  className="flex-1 h-11 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {withdrawLoading ? (<><span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Submitting…</>) : "Request Withdrawal"}
                 </button>
               </div>
             </form>

@@ -408,7 +408,7 @@ const MemberProfile = () => {
                 <div className="p-2 rounded-lg bg-primary/10 text-primary"><CreditCard className="h-5 w-5" /></div>
                 <div>
                   <p className="text-xl font-bold text-foreground">{profile!.contributionTotal}</p>
-                  <p className="text-xs text-muted-foreground">Total Contributions (completed)</p>
+                  <p className="text-xs text-muted-foreground">Contribution Balance</p>
                 </div>
               </CardContent>
             </Card>

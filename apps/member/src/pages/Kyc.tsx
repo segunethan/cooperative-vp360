@@ -4,6 +4,7 @@ import { ShieldCheck } from "lucide-react";
 import { useMemberProfile, useInvalidateMemberProfile } from "@/hooks/useMemberProfile";
 import { submitKyc, fetchOwnKyc, type KycFormData, type KycIdType } from "@jollify/shared/lib/api/kyc";
 import { fetchMembershipSettings } from "@jollify/shared/lib/api/settings";
+import { fetchBanks } from "@jollify/shared/lib/api/banks";
 import { formatMoneyFull, nairaToKobo, generatePaymentReference } from "@jollify/shared/lib/money";
 import { supabase } from "@jollify/shared/lib/supabase";
 import { useQuery } from "@tanstack/react-query";
@@ -53,6 +54,25 @@ const Field = ({
   </div>
 );
 
+const SelectField = ({
+  label, value, onChange, options, error, required = true,
+}: {
+  label: string; value: string; onChange: (v: string) => void; options: string[]; error?: string; required?: boolean;
+}) => (
+  <div className="space-y-1.5">
+    <label className="text-sm font-medium text-foreground">{label}{required && " *"}</label>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`w-full h-11 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 ${error ? "border-red-300" : "border-input focus:border-primary"}`}
+    >
+      <option value="">Select bank</option>
+      {options.map((o) => <option key={o} value={o}>{o}</option>)}
+    </select>
+    {error && <p className="text-xs text-red-600">{error}</p>}
+  </div>
+);
+
 const uploadDocument = async (tenantId: string, prefix: string, file: File): Promise<string | null> => {
   const ext = file.name.split(".").pop() ?? "bin";
   const ref = generatePaymentReference(prefix);
@@ -81,6 +101,11 @@ const Kyc = () => {
   });
   const entranceFeeKobo = membershipSettings?.entranceFeeKobo ?? null;
   const bankAccountInfo = membershipSettings?.bankAccountInfo ?? null;
+
+  const { data: banks = [] } = useQuery({
+    queryKey: ["banks"],
+    queryFn: fetchBanks,
+  });
 
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<KycFormData>(EMPTY_FORM);
@@ -319,7 +344,7 @@ const Kyc = () => {
       <div className="bg-white rounded-xl border border-border p-4 space-y-4">
         {step === 0 && (
           <>
-            <Field label="Bank Name" value={form.bankName} onChange={set("bankName")} placeholder="e.g. GTBank" autoComplete="off" error={errFor("bankName")} />
+            <SelectField label="Bank Name" value={form.bankName} onChange={set("bankName")} options={banks.map((b) => b.name)} error={errFor("bankName")} />
             <Field label="Account Number" value={form.accountNumber} onChange={set("accountNumber")} placeholder="10-digit account number" autoComplete="off" error={errFor("accountNumber")} />
             <Field label="Account Name" value={form.accountName} onChange={set("accountName")} placeholder="As it appears on your bank account" autoComplete="name" error={errFor("accountName")} />
             <Field label="BVN" value={form.bvn} onChange={(v) => set("bvn")(v.replace(/\D/g, "").slice(0, 11))} placeholder="11-digit BVN" error={errFor("bvn")} />

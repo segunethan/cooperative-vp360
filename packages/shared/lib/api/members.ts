@@ -126,11 +126,12 @@ const sumByMember = (rows: { member_id: string; amount: number }[] | null): Map<
 // ── Reads ────────────────────────────────────────────────────────────────────
 
 export const fetchAllMembers = async (): Promise<Member[]> => {
-  const [membersRes, contributionsRes, sharesRes, loansRes] = await Promise.all([
+  const [membersRes, contributionsRes, sharesRes, loansRes, withdrawalsRes] = await Promise.all([
     supabase.from("members").select("*").order("created_at", { ascending: false }),
     supabase.from("contributions").select("member_id, amount_kobo").eq("status", "COMPLETED"),
     supabase.from("shares").select("member_id, total_value_kobo"),
     supabase.from("loans").select("member_id, principal_kobo").eq("status", "ACTIVE"),
+    supabase.from("withdrawal_requests").select("member_id, amount_kobo").eq("status", "PAID"),
   ]);
   if (membersRes.error) handleSupabaseError(membersRes.error);
 
@@ -143,10 +144,13 @@ export const fetchAllMembers = async (): Promise<Member[]> => {
   const loanMap = sumByMember(
     (loansRes.data ?? []).map((r) => ({ member_id: r.member_id, amount: r.principal_kobo }))
   );
+  const withdrawnMap = sumByMember(
+    (withdrawalsRes.data ?? []).map((r) => ({ member_id: r.member_id, amount: r.amount_kobo }))
+  );
 
   return (membersRes.data ?? []).map((row) =>
     toUiMember(row, {
-      contributionKobo: contributionMap.get(row.id) ?? 0,
+      contributionKobo: (contributionMap.get(row.id) ?? 0) - (withdrawnMap.get(row.id) ?? 0),
       shareKobo: shareMap.get(row.id) ?? 0,
       loanKobo: loanMap.get(row.id) ?? 0,
     })
@@ -172,7 +176,7 @@ export const fetchMemberProfile = async (memberNumber: string): Promise<MemberPr
 
   if (error) throw new NotFoundError("Member", memberNumber);
 
-  const [contribResult, loanResult] = await Promise.all([
+  const [contribResult, loanResult, withdrawalResult] = await Promise.all([
     supabase
       .from("contributions")
       .select("amount_kobo")
@@ -183,9 +187,16 @@ export const fetchMemberProfile = async (memberNumber: string): Promise<MemberPr
       .select("principal_kobo")
       .eq("member_id", data.id)
       .eq("status", "ACTIVE"),
+    supabase
+      .from("withdrawal_requests")
+      .select("amount_kobo")
+      .eq("member_id", data.id)
+      .eq("status", "PAID"),
   ]);
 
-  const contributionTotalKobo = (contribResult.data ?? []).reduce((s, r) => s + r.amount_kobo, 0);
+  const contributionTotalKobo =
+    (contribResult.data ?? []).reduce((s, r) => s + r.amount_kobo, 0)
+    - (withdrawalResult.data ?? []).reduce((s, r) => s + r.amount_kobo, 0);
   const loanTotalKobo = (loanResult.data ?? []).reduce((s, r) => s + r.principal_kobo, 0);
 
   return {

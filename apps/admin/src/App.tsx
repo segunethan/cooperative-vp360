@@ -25,6 +25,7 @@ import Kyc from "./pages/cooperative/Kyc";
 import Kyb from "./pages/cooperative/Kyb";
 import Dividends from "./pages/cooperative/Dividends";
 import Payroll from "./pages/cooperative/Payroll";
+import Withdrawals from "./pages/cooperative/Withdrawals";
 import Announcements from "./pages/cooperative/Announcements";
 import Reports from "./pages/cooperative/Reports";
 import Settings from "./pages/cooperative/Settings";
@@ -68,6 +69,7 @@ const App = () => (
               <Route path="kyb" element={<Kyb />} />
               <Route path="dividends" element={<Dividends />} />
               <Route path="payroll" element={<Payroll />} />
+              <Route path="withdrawals" element={<Withdrawals />} />
               <Route path="announcements" element={<Announcements />} />
               <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<Settings />} />
