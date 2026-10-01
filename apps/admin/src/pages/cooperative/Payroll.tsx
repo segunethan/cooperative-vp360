@@ -131,7 +131,7 @@ const Payroll = () => {
   const createBatchMutation = useMutation({
     mutationFn: () => createPayrollBatch(periodMonth, periodYear),
     onSuccess: (batch) => {
-      toast.success(`Batch created with ${batch?.member_count ?? 0} member(s).`);
+      toast.success(`Batch ready with ${batch?.member_count ?? 0} member(s).`);
       queryClient.invalidateQueries({ queryKey: ["payroll-batches"] });
       if (batch) setSelectedBatchId(batch.id);
     },
