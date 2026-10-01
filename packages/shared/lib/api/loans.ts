@@ -1,6 +1,7 @@
 import { supabase } from "../supabase";
 import { nairaToKobo, formatMoneyFull, generatePaymentReference } from "../money";
 import { handleSupabaseError, NotFoundError } from "../errors";
+import type { LoanPrepaymentStrategy } from "./loanTypes";
 
 export interface LoanApplicationRow {
   id: string;
@@ -20,6 +21,8 @@ export interface LoanApplicationRow {
 export interface ActiveLoanRow extends LoanApplicationRow {
   dueDate: string;
   disbursedDate: string;
+  repaidKobo: number;
+  outstandingKobo: number;
 }
 
 export interface SubmitLoanApplicationData {
@@ -84,15 +87,42 @@ export const fetchActiveLoans = async (): Promise<ActiveLoanRow[]> => {
     .eq("status", "ACTIVE")
     .order("due_date", { ascending: true });
   if (error) handleSupabaseError(error);
-  return (data ?? []).map((row) => ({
-    ...toApplicationRow(row),
-    dueDate: row.due_date
-      ? new Date(row.due_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
-      : "—",
-    disbursedDate: row.disbursed_at
-      ? new Date(row.disbursed_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
-      : "—",
-  }));
+
+  const loans = data ?? [];
+  const loanIds = loans.map((l) => l.id);
+
+  // Repaid/outstanding come from loan_repayments directly rather than the
+  // installment schedule, so these columns stay correct even for a loan
+  // whose schedule predates this feature or was never (re)generated.
+  const repaidByLoan = new Map<string, { totalKobo: number; principalKobo: number }>();
+  if (loanIds.length > 0) {
+    const { data: repayments, error: repayError } = await supabase
+      .from("loan_repayments")
+      .select("loan_id, amount_kobo, principal_portion_kobo")
+      .in("loan_id", loanIds);
+    if (repayError) handleSupabaseError(repayError);
+    for (const r of repayments ?? []) {
+      const entry = repaidByLoan.get(r.loan_id) ?? { totalKobo: 0, principalKobo: 0 };
+      entry.totalKobo += r.amount_kobo;
+      entry.principalKobo += r.principal_portion_kobo;
+      repaidByLoan.set(r.loan_id, entry);
+    }
+  }
+
+  return loans.map((row) => {
+    const repaid = repaidByLoan.get(row.id) ?? { totalKobo: 0, principalKobo: 0 };
+    return {
+      ...toApplicationRow(row),
+      dueDate: row.due_date
+        ? new Date(row.due_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+        : "—",
+      disbursedDate: row.disbursed_at
+        ? new Date(row.disbursed_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+        : "—",
+      repaidKobo: repaid.totalKobo,
+      outstandingKobo: Math.max(row.principal_kobo - repaid.principalKobo, 0),
+    };
+  });
 };
 
 export const fetchAllLoans = async (): Promise<LoanApplicationRow[]> => {
@@ -157,8 +187,18 @@ export const rejectLoanApplication = async (loanId: string): Promise<void> => {
 };
 
 export const disburseLoanToMember = async (loanId: string, paystackRef?: string): Promise<void> => {
+  // due_date must track the loan's own tenure — it was previously hardcoded
+  // to 12 months regardless of what the borrower actually agreed to.
+  const { data: loan, error: loanError } = await supabase
+    .from("loans")
+    .select("tenure_months")
+    .eq("id", loanId)
+    .single();
+  if (loanError) handleSupabaseError(loanError);
+
   const dueDate = new Date();
-  dueDate.setMonth(dueDate.getMonth() + 12);
+  dueDate.setMonth(dueDate.getMonth() + (loan?.tenure_months ?? 12));
+
   const { error } = await supabase
     .from("loans")
     .update({
@@ -263,6 +303,83 @@ export const fetchLoanLedger = async (loanId: string): Promise<LoanLedgerRow[]> 
   }
 
   return rows;
+};
+
+export interface LoanScheduleRow {
+  installmentNumber: number;
+  dueDate: string;
+  openingBalanceKobo: number;
+  principalDueKobo: number;
+  interestDueKobo: number;
+  installmentAmountKobo: number;
+  closingBalanceKobo: number;
+  paidAmountKobo: number;
+  status: "PENDING" | "PARTIAL" | "PAID";
+  isOverdue: boolean;
+  daysPastDue: number;
+  estimatedPenaltyKobo: number;
+}
+
+// The fixed amortization plan generated at disbursement (see
+// generate_loan_schedule() / the loans_generate_schedule_on_disburse
+// trigger), reprojected after any prepayment by recompute_loan_schedule().
+// RLS scopes this the same way for both callers: an admin sees any loan in
+// their tenant, a member sees only their own loan's schedule.
+//
+// Overdue status, days-past-due, and the penalty estimate are all computed
+// here at read time rather than stored — "overdue" is inherently a
+// function of today's date, so recalculating it is more correct than a
+// stored flag that would need a cron to keep fresh, and avoids needing one
+// at all. The penalty is informational only in this pass: it is not yet
+// folded into what record_loan_repayment() requires to mark an
+// installment PAID.
+export const fetchLoanSchedule = async (loanId: string): Promise<LoanScheduleRow[]> => {
+  const { data, error } = await supabase
+    .from("loan_installments")
+    .select("installment_number, due_date, opening_balance_kobo, principal_due_kobo, interest_due_kobo, installment_amount_kobo, closing_balance_kobo, paid_amount_kobo, status, loans(late_penalty_bps_per_month)")
+    .eq("loan_id", loanId)
+    .order("installment_number", { ascending: true });
+  if (error) handleSupabaseError(error);
+
+  const today = new Date();
+  const todayStr = today.toISOString().split("T")[0];
+
+  return (data ?? []).map((r) => {
+    const isOverdue = r.status !== "PAID" && r.due_date < todayStr;
+    const daysPastDue = isOverdue
+      ? Math.max(Math.floor((today.getTime() - new Date(r.due_date).getTime()) / (1000 * 60 * 60 * 24)), 0)
+      : 0;
+    const penaltyBps = (r.loans as unknown as { late_penalty_bps_per_month: number | null } | null)?.late_penalty_bps_per_month;
+    const outstandingOnInstallment = r.installment_amount_kobo - r.paid_amount_kobo;
+    const estimatedPenaltyKobo = isOverdue && penaltyBps
+      ? Math.round(outstandingOnInstallment * (penaltyBps / 10000) * (daysPastDue / 30))
+      : 0;
+
+    return {
+      installmentNumber: r.installment_number,
+      dueDate: r.due_date,
+      openingBalanceKobo: r.opening_balance_kobo,
+      principalDueKobo: r.principal_due_kobo,
+      interestDueKobo: r.interest_due_kobo,
+      installmentAmountKobo: r.installment_amount_kobo,
+      closingBalanceKobo: r.closing_balance_kobo,
+      paidAmountKobo: r.paid_amount_kobo,
+      status: r.status,
+      isOverdue,
+      daysPastDue,
+      estimatedPenaltyKobo,
+    };
+  });
+};
+
+// "What would it cost to close this loan today" — outstanding principal
+// plus interest accrued since the last fully-settled point, NOT the sum of
+// remaining scheduled installments (which overcounts: those include
+// interest on money that hasn't been owed that long yet).
+export const fetchEarlyPayoffQuote = async (loanId: string): Promise<number> => {
+  const { data, error } = await supabase.rpc("calculate_early_payoff", { p_loan_id: loanId });
+  if (error) handleSupabaseError(error);
+  return (data as number) ?? 0;
 };
 
 export const recordLoanRepayment = async (
@@ -376,28 +493,61 @@ export const requestLoanTopup = async (params: {
 };
 
 export const fetchPendingLoanTopups = async (): Promise<
-  { id: string; loanNumber: string; memberName: string; amountKobo: number; requestedAt: string }[]
+  { id: string; loanId: string; loanNumber: string; memberName: string; amountKobo: number; requestedAt: string; defaultStrategy: LoanPrepaymentStrategy }[]
 > => {
   const { data, error } = await supabase
     .from("loan_topup_requests")
-    .select("id, amount_kobo, requested_at, loans(loan_number), members(full_name)")
+    .select("id, amount_kobo, requested_at, loans(id, loan_number, prepayment_strategy), members(full_name)")
     .eq("status", "PENDING")
     .order("requested_at", { ascending: true });
   if (error) handleSupabaseError(error);
-  return (data ?? []).map((r) => ({
-    id: r.id,
-    loanNumber: (r.loans as unknown as { loan_number: string } | null)?.loan_number ?? "—",
-    memberName: (r.members as unknown as { full_name: string } | null)?.full_name ?? "—",
-    amountKobo: r.amount_kobo,
-    requestedAt: r.requested_at,
-  }));
+  return (data ?? []).map((r) => {
+    const loan = r.loans as unknown as { id: string; loan_number: string; prepayment_strategy: LoanPrepaymentStrategy } | null;
+    return {
+      id: r.id,
+      loanId: loan?.id ?? "",
+      loanNumber: loan?.loan_number ?? "—",
+      memberName: (r.members as unknown as { full_name: string } | null)?.full_name ?? "—",
+      amountKobo: r.amount_kobo,
+      requestedAt: r.requested_at,
+      defaultStrategy: loan?.prepayment_strategy ?? "REDUCE_TENURE",
+    };
+  });
 };
 
-export const reviewLoanTopup = async (requestId: string, approve: boolean, reviewerId: string): Promise<void> => {
+export const reviewLoanTopup = async (
+  requestId: string,
+  approve: boolean,
+  reviewerId: string,
+  strategy?: LoanPrepaymentStrategy
+): Promise<void> => {
   const { error } = await supabase.rpc("review_loan_topup", {
     p_request_id: requestId,
     p_approve: approve,
     p_reviewer: reviewerId,
+    p_strategy: strategy ?? null,
   });
   if (error) handleSupabaseError(error);
+};
+
+export interface LoanTopupPreview {
+  newInstallmentKobo: number;
+  newRemainingMonths: number;
+  newFinalDueDate: string;
+}
+
+// Lets the admin see the new monthly amount (or new end date) under either
+// strategy before actually approving — read-only, mutates nothing.
+export const previewLoanTopup = async (requestId: string, strategy: LoanPrepaymentStrategy): Promise<LoanTopupPreview | null> => {
+  const { data, error } = await supabase
+    .rpc("preview_loan_topup", { p_request_id: requestId, p_strategy: strategy })
+    .single();
+  if (error) handleSupabaseError(error);
+  if (!data) return null;
+  const row = data as { new_installment_kobo: number; new_remaining_months: number; new_final_due_date: string };
+  return {
+    newInstallmentKobo: row.new_installment_kobo,
+    newRemainingMonths: row.new_remaining_months,
+    newFinalDueDate: row.new_final_due_date,
+  };
 };

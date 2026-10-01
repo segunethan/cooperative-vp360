@@ -6,6 +6,8 @@ import { supabase } from "@jollify/shared/lib/supabase";
 import { formatMoneyFull, nairaToKobo } from "@jollify/shared/lib/money";
 import {
   fetchLoanLedger,
+  fetchLoanSchedule,
+  fetchEarlyPayoffQuote,
   requestLoanTopup,
   requestLoanRepayment,
   fetchOwnPendingRepaymentRequests,
@@ -57,6 +59,19 @@ const LoanDetail = () => {
     queryKey: ["loan-pending-repayments", id],
     queryFn: () => fetchOwnPendingRepaymentRequests(id!),
     enabled: !!id,
+  });
+
+  const { data: schedule = [], isLoading: loadingSchedule } = useQuery({
+    queryKey: ["loan-schedule", id],
+    queryFn: () => fetchLoanSchedule(id!),
+    enabled: !!id,
+  });
+  const nextDue = schedule.find((r) => r.status !== "PAID");
+
+  const { data: payoffQuote } = useQuery({
+    queryKey: ["loan-early-payoff", id],
+    queryFn: () => fetchEarlyPayoffQuote(id!),
+    enabled: !!id && !!nextDue,
   });
 
   const handleTopup = async () => {
@@ -123,6 +138,76 @@ const LoanDetail = () => {
           <p className="text-sm text-muted-foreground">{formatMoneyFull(loan.principal_kobo)} · {loan.purpose ?? "—"}</p>
         </div>
       </div>
+
+      {schedule.length > 0 && (
+        <div>
+          <p className="text-sm font-semibold text-foreground mb-2">Repayment Schedule</p>
+          {nextDue && (
+            <div className={`rounded-lg border px-4 py-3 mb-3 flex items-center justify-between ${nextDue.isOverdue ? "bg-red-50 border-red-200" : "bg-primary/5 border-primary/20"}`}>
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Installment {nextDue.installmentNumber} of {schedule.length}
+                  {nextDue.isOverdue && <span className="text-destructive font-semibold"> · {nextDue.daysPastDue}d overdue</span>}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Due {new Date(nextDue.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                  {nextDue.estimatedPenaltyKobo > 0 && <span className="text-destructive"> · +{formatMoneyFull(nextDue.estimatedPenaltyKobo)} penalty</span>}
+                </p>
+              </div>
+              <p className="text-base font-bold text-foreground">{formatMoneyFull(nextDue.installmentAmountKobo - nextDue.paidAmountKobo)}</p>
+            </div>
+          )}
+          {nextDue && payoffQuote != null && payoffQuote > 0 && (
+            <div className="rounded-lg bg-muted/40 border border-border px-4 py-2.5 mb-3 flex items-center justify-between text-sm">
+              <p className="text-muted-foreground">Pay off in full today</p>
+              <p className="font-bold text-foreground">{formatMoneyFull(payoffQuote)}</p>
+            </div>
+          )}
+          {!nextDue && !loadingSchedule && (
+            <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 mb-3 text-sm text-emerald-700 font-medium">
+              Fully repaid — every installment has been paid.
+            </div>
+          )}
+          <div className="border rounded-lg overflow-x-auto bg-white">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">#</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Due Date</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Principal</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Interest</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Installment</th>
+                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Balance</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {schedule.map((r) => (
+                  <tr key={r.installmentNumber}>
+                    <td className="px-3 py-2">{r.installmentNumber}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {new Date(r.dueDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                    </td>
+                    <td className="px-3 py-2 text-right">{formatMoneyFull(r.principalDueKobo)}</td>
+                    <td className="px-3 py-2 text-right">{formatMoneyFull(r.interestDueKobo)}</td>
+                    <td className="px-3 py-2 text-right font-medium">{formatMoneyFull(r.installmentAmountKobo)}</td>
+                    <td className="px-3 py-2 text-right">{formatMoneyFull(r.closingBalanceKobo)}</td>
+                    <td className="px-3 py-2">
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
+                        r.status === "PAID" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : r.status === "PARTIAL" ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : "bg-gray-50 text-gray-600 border-gray-200"
+                      }`}>
+                        {r.isOverdue ? "OVERDUE" : r.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div>
         <p className="text-sm font-semibold text-foreground mb-2">Transaction History</p>

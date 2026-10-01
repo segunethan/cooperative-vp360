@@ -35,12 +35,14 @@ import {
   fetchPendingLoanRepaymentRequests,
   reviewLoanRepaymentRequest,
 } from "@jollify/shared/lib/api/loans";
-import { fetchAllLoanTypes, archiveLoanType, type LoanType } from "@jollify/shared/lib/api/loanTypes";
+import { fetchAllLoanTypes, archiveLoanType, type LoanType, type LoanPrepaymentStrategy } from "@jollify/shared/lib/api/loanTypes";
 import { formatMoney, formatMoneyFull } from "@jollify/shared/lib/money";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import LoanApplicationDialog from "@/components/cooperative/loans/LoanApplicationDialog";
 import LoanLedgerDialog from "@/components/cooperative/loans/LoanLedgerDialog";
+import LoanScheduleDialog from "@/components/cooperative/loans/LoanScheduleDialog";
+import TopupReviewDialog from "@/components/cooperative/loans/TopupReviewDialog";
 import RecordRepaymentDialog from "@/components/cooperative/loans/RecordRepaymentDialog";
 import LoanTypeFormDialog from "@/components/cooperative/loans/LoanTypeFormDialog";
 
@@ -73,6 +75,8 @@ const Loans = () => {
   const queryClient = useQueryClient();
   const [newLoanOpen, setNewLoanOpen] = useState(false);
   const [ledgerLoan, setLedgerLoan] = useState<{ id: string; loanNumber: string; allowRepayment: boolean } | null>(null);
+  const [scheduleLoan, setScheduleLoan] = useState<{ id: string; loanNumber: string } | null>(null);
+  const [topupToReview, setTopupToReview] = useState<{ id: string; loanNumber: string; amountKobo: number; defaultStrategy: LoanPrepaymentStrategy } | null>(null);
   const [repaymentLoan, setRepaymentLoan] = useState<{ id: string; loanNumber: string } | null>(null);
   const [loanTypeDialogOpen, setLoanTypeDialogOpen] = useState(false);
   const [editingLoanType, setEditingLoanType] = useState<LoanType | null>(null);
@@ -411,6 +415,8 @@ const Loans = () => {
                         <TableHead>Principal</TableHead>
                         <TableHead>Rate</TableHead>
                         <TableHead>Tenure</TableHead>
+                        <TableHead>Repaid</TableHead>
+                        <TableHead>Outstanding</TableHead>
                         <TableHead>Due Date</TableHead>
                         <TableHead>Disbursed</TableHead>
                         <TableHead>Actions</TableHead>
@@ -418,10 +424,10 @@ const Loans = () => {
                     </TableHeader>
                     <TableBody>
                       {loadingActive ? (
-                        Array.from({ length: 3 }).map((_, i) => <SkeletonRow key={i} cols={8} />)
+                        Array.from({ length: 3 }).map((_, i) => <SkeletonRow key={i} cols={10} />)
                       ) : activeLoans.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={8}>
+                          <TableCell colSpan={10}>
                             <div className="flex flex-col items-center py-10 text-center text-muted-foreground">
                               <CreditCard className="h-10 w-10 mb-3 opacity-30" />
                               <p className="font-medium">No active loans</p>
@@ -442,10 +448,19 @@ const Loans = () => {
                             <TableCell className="font-medium">{loan.principalAmount}</TableCell>
                             <TableCell>{loan.interestRatePercent}%</TableCell>
                             <TableCell>{loan.tenureMonths}mo</TableCell>
+                            <TableCell className="text-success">{formatMoneyFull(loan.repaidKobo)}</TableCell>
+                            <TableCell className="font-medium">{formatMoneyFull(loan.outstandingKobo)}</TableCell>
                             <TableCell>{loan.dueDate}</TableCell>
                             <TableCell>{loan.disbursedDate}</TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setScheduleLoan({ id: loan.id, loanNumber: loan.loanNumber })}
+                                >
+                                  Schedule
+                                </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -510,10 +525,9 @@ const Loans = () => {
                               <div className="flex items-center gap-1">
                                 <Button
                                   variant="ghost" size="sm" className="text-success hover:text-success"
-                                  disabled={topupMutation.isPending}
-                                  onClick={() => topupMutation.mutate({ requestId: r.id, approve: true })}
+                                  onClick={() => setTopupToReview(r)}
                                 >
-                                  Approve
+                                  Review & Approve
                                 </Button>
                                 <Button
                                   variant="ghost" size="sm" className="text-destructive hover:text-destructive"
@@ -680,6 +694,11 @@ const Loans = () => {
           </Tabs>
         </CardContent>
       </Card>
+      <TopupReviewDialog
+        request={topupToReview}
+        reviewerId={user?.id ?? ""}
+        onClose={() => setTopupToReview(null)}
+      />
       <LoanTypeFormDialog
         open={loanTypeDialogOpen}
         tenantId={tenant?.id ?? ""}
@@ -690,6 +709,11 @@ const Loans = () => {
         open={newLoanOpen}
         onClose={() => setNewLoanOpen(false)}
         onSubmitted={invalidateLoans}
+      />
+      <LoanScheduleDialog
+        loanId={scheduleLoan?.id ?? null}
+        loanNumber={scheduleLoan?.loanNumber ?? ""}
+        onClose={() => setScheduleLoan(null)}
       />
       <LoanLedgerDialog
         loanId={ledgerLoan?.id ?? null}

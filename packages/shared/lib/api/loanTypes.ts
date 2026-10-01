@@ -2,6 +2,8 @@ import { supabase } from "../supabase";
 import { handleSupabaseError } from "../errors";
 
 export type LoanTypeStatus = "ACTIVE" | "ARCHIVED";
+export type LoanInterestMethod = "REDUCING_BALANCE" | "FLAT";
+export type LoanPrepaymentStrategy = "REDUCE_TENURE" | "REDUCE_INSTALLMENT" | "ADVANCE_PAYMENT";
 
 export interface LoanType {
   id: string;
@@ -12,6 +14,9 @@ export interface LoanType {
   interestRatePercent: number;
   tenureMonths: number;
   status: LoanTypeStatus;
+  interestMethod: LoanInterestMethod;
+  prepaymentStrategy: LoanPrepaymentStrategy;
+  latePenaltyPercentPerMonth: number | null;
 }
 
 const toLoanType = (row: Record<string, unknown>): LoanType => ({
@@ -23,6 +28,9 @@ const toLoanType = (row: Record<string, unknown>): LoanType => ({
   interestRatePercent: (row.interest_rate_bps as number) / 100,
   tenureMonths: row.tenure_months as number,
   status: row.status as LoanTypeStatus,
+  interestMethod: row.interest_method as LoanInterestMethod,
+  prepaymentStrategy: row.prepayment_strategy as LoanPrepaymentStrategy,
+  latePenaltyPercentPerMonth: row.late_penalty_bps_per_month != null ? (row.late_penalty_bps_per_month as number) / 100 : null,
 });
 
 // ── Reads ────────────────────────────────────────────────────────────────────
@@ -56,6 +64,9 @@ export interface LoanTypeFormData {
   interestRatePercent: number;
   tenureMonths: number;
   status: LoanTypeStatus;
+  interestMethod: LoanInterestMethod;
+  prepaymentStrategy: LoanPrepaymentStrategy;
+  latePenaltyPercentPerMonth?: number | null;
 }
 
 export const createLoanType = async (tenantId: string, data: LoanTypeFormData): Promise<void> => {
@@ -66,6 +77,9 @@ export const createLoanType = async (tenantId: string, data: LoanTypeFormData): 
     interest_rate_bps: Math.round(data.interestRatePercent * 100),
     tenure_months: data.tenureMonths,
     status: data.status,
+    interest_method: data.interestMethod,
+    prepayment_strategy: data.prepaymentStrategy,
+    late_penalty_bps_per_month: data.latePenaltyPercentPerMonth ? Math.round(data.latePenaltyPercentPerMonth * 100) : null,
   });
   if (error) handleSupabaseError(error);
 };
@@ -79,6 +93,9 @@ export const updateLoanType = async (loanTypeId: string, data: LoanTypeFormData)
       interest_rate_bps: Math.round(data.interestRatePercent * 100),
       tenure_months: data.tenureMonths,
       status: data.status,
+      interest_method: data.interestMethod,
+      prepayment_strategy: data.prepaymentStrategy,
+      late_penalty_bps_per_month: data.latePenaltyPercentPerMonth ? Math.round(data.latePenaltyPercentPerMonth * 100) : null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", loanTypeId);
