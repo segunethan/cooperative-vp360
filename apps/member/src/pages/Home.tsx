@@ -7,6 +7,7 @@ import { fetchMemberSubscriptions } from "@jollify/shared/lib/api/products";
 import { notifyRequestSubmitted } from "@jollify/shared/lib/api/products";
 import { fetchMemberAnnouncements } from "@jollify/shared/lib/api/announcements";
 import { fetchOwnKyc, type KycSubmission } from "@jollify/shared/lib/api/kyc";
+import { fetchMemberDividendHistory } from "@jollify/shared/lib/api/dividends";
 import { fetchWithdrawalSettings } from "@jollify/shared/lib/api/settings";
 import { fetchBanks } from "@jollify/shared/lib/api/banks";
 import {
@@ -121,6 +122,12 @@ const Home = () => {
     enabled: !!profile && !!withdrawalSettings?.withdrawalsEnabled,
   });
   const latestWithdrawal = ownWithdrawals[0] ?? null;
+
+  const { data: dividends = [] } = useQuery({
+    queryKey: ["own-dividends", profile?.memberId],
+    queryFn: () => fetchMemberDividendHistory(profile!.memberId),
+    enabled: !!profile,
+  });
 
   const loadContributions = async () => {
     if (!profile) return;
@@ -436,6 +443,32 @@ const Home = () => {
           </div>
         )}
       </div>
+
+      {/* Dividends */}
+      {dividends.length > 0 && (
+        <div className="bg-white rounded-xl border border-border overflow-hidden">
+          <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <h2 className="font-semibold text-foreground text-sm">My Dividends</h2>
+          </div>
+          <div className="divide-y divide-border">
+            {dividends.map((d) => (
+              <div key={d.id} className="px-5 py-3.5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${d.paidAt ? "bg-emerald-500" : "bg-amber-400"}`} />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{d.entitlement}</p>
+                    <p className="text-xs text-muted-foreground">{d.period} · {d.ratePct.toFixed(2)}%</p>
+                  </div>
+                </div>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${d.paidAt ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                  {d.paidAt ? `Paid ${d.paidAt}` : "Pending"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Submit Contribution Dialog */}
       {contribOpen && (

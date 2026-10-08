@@ -39,6 +39,7 @@ import {
   CircleAlert,
   Wallet,
   Pencil,
+  TrendingUp,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -49,6 +50,7 @@ import {
   type MemberPayrollFormData,
   type MemberProfile as MemberProfileData,
 } from "@jollify/shared/lib/api/members";
+import { fetchMemberDividendHistory } from "@jollify/shared/lib/api/dividends";
 import { fetchPayrollSettings } from "@jollify/shared/lib/api/settings";
 import { fetchOwnKyc } from "@jollify/shared/lib/api/kyc";
 import { fetchMemberLedger, type MemberDueRow } from "@jollify/shared/lib/api/ledger";
@@ -350,6 +352,12 @@ const MemberProfile = () => {
     enabled: !!profile?.id,
   });
 
+  const { data: dividends = [], isLoading: loadingDividends } = useQuery({
+    queryKey: ["member-dividends", profile?.id],
+    queryFn: () => fetchMemberDividendHistory(profile!.id),
+    enabled: !!profile?.id,
+  });
+
   if (profileError) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-4">
@@ -441,6 +449,7 @@ const MemberProfile = () => {
           <TabsTrigger value="kyc"><FileCheck className="h-4 w-4 mr-1" />KYC & Onboarding</TabsTrigger>
           <TabsTrigger value="contributions"><CreditCard className="h-4 w-4 mr-1" />Contributions</TabsTrigger>
           <TabsTrigger value="loans"><Landmark className="h-4 w-4 mr-1" />Loans</TabsTrigger>
+          <TabsTrigger value="dividends"><TrendingUp className="h-4 w-4 mr-1" />Dividends</TabsTrigger>
           <TabsTrigger value="dues-ledger"><ListChecks className="h-4 w-4 mr-1" />Payroll Ledger</TabsTrigger>
         </TabsList>
 
@@ -610,6 +619,65 @@ const MemberProfile = () => {
                           <TableCell>{l.appliedDate}</TableCell>
                           <TableCell>{l.disbursedDate ?? "—"}</TableCell>
                           <TableCell>{l.dueDate ?? "—"}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Dividends ── */}
+        <TabsContent value="dividends">
+          <Card>
+            <CardHeader><CardTitle>Dividend History</CardTitle></CardHeader>
+            <CardContent>
+              <div className="border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Period</TableHead>
+                      <TableHead>Rate</TableHead>
+                      <TableHead className="text-right">Entitlement</TableHead>
+                      <TableHead>Payout Date</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadingDividends ? (
+                      Array.from({ length: 2 }).map((_, i) => (
+                        <TableRow key={i}>
+                          {Array.from({ length: 5 }).map((_, j) => (
+                            <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    ) : dividends.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5}>
+                          <div className="flex flex-col items-center py-8 text-center text-muted-foreground">
+                            <TrendingUp className="h-8 w-8 mb-2 opacity-30" />
+                            <p className="text-sm">No dividends declared for this member yet.</p>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      dividends.map((d) => (
+                        <TableRow key={d.id}>
+                          <TableCell className="font-medium">{d.period}</TableCell>
+                          <TableCell>{d.ratePct.toFixed(2)}%</TableCell>
+                          <TableCell className="text-right font-semibold text-primary">{d.entitlement}</TableCell>
+                          <TableCell>{d.payoutDate ?? "—"}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={d.paidAt
+                              ? "bg-success/10 text-success border-success/20"
+                              : "bg-muted/50 text-muted-foreground border-border"
+                            }>
+                              {d.paidAt ? `Paid ${d.paidAt}` : "Pending"}
+                            </Badge>
+                          </TableCell>
                         </TableRow>
                       ))
                     )}

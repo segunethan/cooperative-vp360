@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@jollify/shared/components/ui/card";
 import { Button } from "@jollify/shared/components/ui/button";
@@ -12,9 +12,10 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from "@jollify/shared/components/ui/collapsible";
 import {
-  TrendingUp, ChevronDown, Users, Calendar, Plus, Banknote,
+  TrendingUp, ChevronDown, Users, Calendar, Plus, Banknote, Send,
 } from "lucide-react";
-import { fetchAllDividends, fetchDividendEntitlements } from "@jollify/shared/lib/api/dividends";
+import { toast } from "sonner";
+import { fetchAllDividends, fetchDividendEntitlements, markDividendPaid } from "@jollify/shared/lib/api/dividends";
 import DeclareDividendDialog from "@/components/cooperative/dividends/DeclareDividendDialog";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -73,6 +74,7 @@ const DividendEntitlementsRow = ({ dividendId }: { dividendId: string }) => {
 
 const Dividends = () => {
   const { tenant } = useAuth();
+  const queryClient = useQueryClient();
   const [declareOpen, setDeclareOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -80,6 +82,17 @@ const Dividends = () => {
     queryKey: ["dividends"],
     queryFn: fetchAllDividends,
     enabled: !!tenant,
+  });
+
+  const markPaidMutation = useMutation({
+    mutationFn: (dividendId: string) => markDividendPaid(dividendId),
+    onSuccess: () => {
+      toast.success("Dividend marked as paid.");
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["dividend-entitlements"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const totalPaidKobo = dividends
@@ -198,6 +211,15 @@ const Dividends = () => {
                         <p className="font-bold text-foreground">{d.totalAmount}</p>
                         <p className="text-xs text-muted-foreground">{d.declaredAt ?? d.createdAt}</p>
                       </div>
+                      {d.status !== "COMPLETED" && (
+                        <Button
+                          size="sm" variant="outline" className="shrink-0"
+                          disabled={markPaidMutation.isPending}
+                          onClick={(e) => { e.stopPropagation(); markPaidMutation.mutate(d.id); }}
+                        >
+                          <Send className="h-3.5 w-3.5 mr-1.5" /> Mark as Paid
+                        </Button>
+                      )}
                       <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${expandedId === d.id ? "rotate-180" : ""}`} />
                     </div>
                   </CollapsibleTrigger>

@@ -27,6 +27,16 @@ export interface DividendEntitlement {
   paidAt: string | null;
 }
 
+export interface MemberDividendRow {
+  id: string;
+  period: string;
+  ratePct: number;
+  entitlementKobo: number;
+  entitlement: string;
+  payoutDate: string | null;
+  paidAt: string | null;
+}
+
 export interface MemberContributionSummary {
   memberId: string;
   memberNumber: string;
@@ -78,7 +88,7 @@ export const fetchDividendEntitlements = async (dividendId: string): Promise<Div
   if (error) handleSupabaseError(error);
 
   return (data ?? []).map((r) => {
-    const m = r.member as { member_number: string; full_name: string } | null;
+    const m = r.member as unknown as { member_number: string; full_name: string } | null;
     return {
       id: r.id,
       memberNumber: m?.member_number ?? "",
@@ -87,6 +97,32 @@ export const fetchDividendEntitlements = async (dividendId: string): Promise<Div
       contributionTotal: formatMoneyFull(r.share_balance_kobo),
       entitlementKobo: r.entitlement_kobo,
       entitlement: formatMoneyFull(r.entitlement_kobo),
+      paidAt: r.paid_at
+        ? new Date(r.paid_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+        : null,
+    };
+  });
+};
+
+// A member's own dividend history — used by both the admin's per-member
+// profile view and the member app itself (RLS scopes each to its own rows).
+export const fetchMemberDividendHistory = async (memberId: string): Promise<MemberDividendRow[]> => {
+  const { data, error } = await supabase
+    .from("dividend_entitlements")
+    .select("id, entitlement_kobo, paid_at, dividend:dividends(period, rate_bps, payout_date)")
+    .eq("member_id", memberId)
+    .order("created_at", { ascending: false });
+  if (error) handleSupabaseError(error);
+
+  return (data ?? []).map((r) => {
+    const d = r.dividend as unknown as { period: string; rate_bps: number; payout_date: string | null } | null;
+    return {
+      id: r.id,
+      period: d?.period ?? "—",
+      ratePct: (d?.rate_bps ?? 0) / 100,
+      entitlementKobo: r.entitlement_kobo,
+      entitlement: formatMoneyFull(r.entitlement_kobo),
+      payoutDate: d?.payout_date ?? null,
       paidAt: r.paid_at
         ? new Date(r.paid_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
         : null,
@@ -185,6 +221,17 @@ export const declareDividend = async (
     .from("dividend_entitlements")
     .insert(entitlementRows);
   if (entError) handleSupabaseError(entError);
+};
+
+// Pays out every unpaid entitlement on this dividend in one step and marks
+// the dividend COMPLETED — this is the step that makes it count toward the
+// dashboard's "Dividends Paid" figure and show as paid to members.
+export const markDividendPaid = async (dividendId: string, reference?: string): Promise<void> => {
+  const { error } = await supabase.rpc("mark_dividend_paid", {
+    p_dividend_id: dividendId,
+    p_reference: reference ?? null,
+  });
+  if (error) handleSupabaseError(error);
 };
 
 export const formatDividendRate = (ratePct: number) => `${ratePct.toFixed(2)}%`;
