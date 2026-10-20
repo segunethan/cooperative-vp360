@@ -16,14 +16,17 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@jollify/shared/components/ui/dialog";
 import {
-  FileText, Download, Clock, Eye, Loader2, ListChecks,
+  FileText, Download, Clock, Eye, Loader2, ListChecks, Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import Papa from "papaparse";
 import {
-  requestReport, fetchReportRequests, reportTypeLabel, reportResultToCsvRows,
+  requestReport, fetchReportRequests, reportTypeLabel, sanitizeCsvCell, fetchMemberRegistryPage,
   type ReportType, type ReportRequestRow,
 } from "@jollify/shared/lib/api/reports";
+import {
+  REPORT_SCHEMAS, MEMBER_REGISTRY_ROW_SCHEMA, extractReportRows, formatCellForExport, columnsForExport,
+} from "@jollify/shared/lib/reportSchemas";
 import { formatMoneyFull } from "@jollify/shared/lib/money";
 
 const REPORT_TYPES = Object.keys(reportTypeLabel) as ReportType[];
@@ -44,12 +47,13 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-const downloadCsv = (rows: Record<string, unknown>[], filename: string) => {
-  if (rows.length === 0) {
-    toast.error("Nothing to export for this report.");
-    return;
-  }
-  const csv = Papa.unparse(rows);
+// `columns` come from the report schema and are always supplied explicitly
+// (never inferred from row contents), so an empty result set still produces
+// a correctly-headed CSV — with real column labels — instead of a blank or
+// column-less file.
+const downloadCsv = (rows: Record<string, unknown>[], columns: { key: string; label: string }[], filename: string) => {
+  const data = rows.map((row) => columns.map((c) => sanitizeCsvCell(row[c.key] as string | number)));
+  const csv = Papa.unparse({ fields: columns.map((c) => c.label), data });
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -209,9 +213,48 @@ const Reports = () => {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const [exportingRegistry, setExportingRegistry] = useState(false);
+
   const handleDownload = (row: ReportRequestRow) => {
-    const rows = reportResultToCsvRows(row.reportType, row.result ?? {});
-    downloadCsv(rows, `${reportTypeLabel[row.reportType].toLowerCase().replace(/\s+/g, "-")}-${row.id.slice(0, 8)}.csv`);
+    const schema = REPORT_SCHEMAS[row.reportType];
+    const columns = columnsForExport(schema.columns);
+    const rows = extractReportRows(row.reportType, row.result ?? {}).map((r) => {
+      const formatted: Record<string, unknown> = {};
+      for (const col of columns) formatted[col.key] = formatCellForExport(col, r[col.key]);
+      return formatted;
+    });
+    downloadCsv(rows, columns, `${reportTypeLabel[row.reportType].toLowerCase().replace(/\s+/g, "-")}-${row.id.slice(0, 8)}.csv`);
+  };
+
+  // Bypasses the job-queue result entirely — the full member list scales
+  // with tenant size (hundreds to 10,000+), so it's pulled directly via
+  // keyset-paginated, RLS-scoped reads and streamed into the CSV in
+  // bounded chunks rather than held as one in-memory array up front.
+  const handleExportFullRegistry = async () => {
+    setExportingRegistry(true);
+    try {
+      const columns = columnsForExport(MEMBER_REGISTRY_ROW_SCHEMA);
+      const allRows: Record<string, unknown>[] = [];
+      let cursor: string | undefined;
+      do {
+        const { rows, nextCursor } = await fetchMemberRegistryPage(cursor, 500);
+        for (const r of rows) {
+          const formatted: Record<string, unknown> = {};
+          for (const col of columns) {
+            formatted[col.key] = formatCellForExport(col, (r as Record<string, unknown>)[col.key]);
+          }
+          allRows.push(formatted);
+        }
+        cursor = nextCursor ?? undefined;
+      } while (cursor);
+
+      downloadCsv(allRows, columns, `member-registry-full-${new Date().toISOString().slice(0, 10)}.csv`);
+      toast.success(`Exported ${allRows.length} member(s).`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExportingRegistry(false);
+    }
   };
 
   const reportsThisMonth = requests.filter((r) => new Date(r.requestedAt).getMonth() === now.getMonth()).length;
@@ -316,6 +359,21 @@ const Reports = () => {
               <p className="text-xs text-muted-foreground">
                 Reports run in the background — this queues it and a worker picks it up within a minute.
               </p>
+
+              {reportType === "MEMBER_REGISTRY" && (
+                <div className="pt-2 border-t">
+                  <Button
+                    variant="outline" className="w-full" disabled={exportingRegistry}
+                    onClick={handleExportFullRegistry}
+                  >
+                    {exportingRegistry ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Users className="h-4 w-4 mr-2" />}
+                    Export Full Member List (CSV)
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    The queued report above gives you status counts. This pulls every member record directly — fine even at 10,000+ members, since it's fetched in pages rather than all at once.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -332,6 +390,7 @@ const Reports = () => {
                       <TableHead>Report</TableHead>
                       <TableHead>Requested</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Rows</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -339,12 +398,12 @@ const Reports = () => {
                     {isLoading ? (
                       Array.from({ length: 3 }).map((_, i) => (
                         <TableRow key={i}>
-                          {Array.from({ length: 4 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}
+                          {Array.from({ length: 5 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}
                         </TableRow>
                       ))
                     ) : requests.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4}>
+                        <TableCell colSpan={5}>
                           <div className="flex flex-col items-center py-10 text-center text-muted-foreground">
                             <FileText className="h-10 w-10 mb-3 opacity-30" />
                             <p className="font-medium">No reports generated yet</p>
@@ -363,6 +422,9 @@ const Reports = () => {
                               {(r.status === "QUEUED" || r.status === "PROCESSING") && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
                               {r.status.charAt(0) + r.status.slice(1).toLowerCase()}
                             </Badge>
+                          </TableCell>
+                          <TableCell className="text-right text-sm text-muted-foreground">
+                            {r.rowCount ?? "—"}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-end gap-1">
